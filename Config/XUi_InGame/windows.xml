@@ -1,0 +1,6 @@
+<configs>
+	<!-- Mod Browser entry point: in-game ESC menu -->
+	<append xpath="/windows/window[@name='ingameMenu']/grid[@name='buttons']">
+		<simplebutton name="btnMods" depth="3" width="250" height="46" caption="MODS" font_size="34" />
+	</append>
+</configs>
