@@ -13,4 +13,8 @@ $options += '-r:' + (Join-Path $GamePath '7DaysToDie_Data\Managed\netstandard.dl
 if ($LASTEXITCODE -ne 0) { throw 'Check compilation failed' }
 & (Join-Path $work 'PackChecks.exe') $work
 if ($LASTEXITCODE -ne 0) { throw ('Pack verification failed; evidence: ' + $work) }
+& $compiler -nologo -target:exe -r:System.Core.dll ('-out:' + (Join-Path $work 'CompilerChecks.exe')) (Join-Path $repo 'src\ModCompiler.cs') (Join-Path $repo 'tests\CompilerChecks.cs')
+if ($LASTEXITCODE -ne 0) { throw 'Compiler check compilation failed' }
+& (Join-Path $work 'CompilerChecks.exe') (Join-Path $work 'compiler checks with spaces') $compiler
+if ($LASTEXITCODE -ne 0) { throw ('Compiler verification failed; evidence: ' + $work) }
 Write-Output ('Evidence: ' + $work)

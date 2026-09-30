@@ -34,6 +34,14 @@ The existing XML, XUI, localization, supported C# mod reload and core swap tools
 
 Useful F1 console commands: `hr status`, `hr doctor`, `hr browser open`, `hr browser sync`, `hr pack export <name>`, `hr pack import <full path>` and the existing reload commands. Game saves are not modified by installation.
 
+## Making several mods
+
+Use one offline authoring workspace with a separate ModInfo.xml and source/Config folder per idea. XML-only tweaks use the game's existing definitions; C# mods use the same game/Harmony references and the existing source-live loader. Check the installed game API once for a shared feature and reuse it across related mods. Saving supported source changes triggers recompilation after the file event settles; some startup behavior and assets still require a restart.
+
+The development `scripts/Build-Mod.ps1` accepts one or several source mod folders. In one batch it validates ModInfo, parses XML, checks and applies supported patch operations to an in-memory copy of the installed game's XML, compiles any C# against the actual game, then writes one ZIP and checksum per mod. It reads authoring folders and writes to an offline output workspace, without installing or launching the game. It rejects missing XPath targets and unsupported validation operations; dependency-specific and conditional XML need their own game check. The ZIP includes source for live editing and compiled code; use IModApi when a DLL must initialize without this manager. No game libraries are bundled.
+
+The in-game compiler now reports its complete diagnostics, rejects compiler failures even when an older DLL exists, preserves the previous successful DLL, and drains output while the compiler runs. Edits saved during compilation remain pending for the completion pass. These development changes are on beta; they do not replace the published release or an active installation.
+
 ## Verification and source
 
 The release has production-source checks for pack save/reload, both Mods locations, exact file matching, protected manager identity, version mismatch, corrupt/interrupted archives, traversal, replacement rollback and queue recovery after failure. Both DLLs compile against the installed game's actual assemblies.

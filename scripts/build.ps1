@@ -25,7 +25,7 @@ foreach ($ref in $refs) { $options += '-r:' + (Join-Path $managed ($ref + '.dll'
 $options += '-r:' + (Join-Path $GamePath 'Mods\0_TFP_Harmony\0Harmony.dll')
 & $Compiler @options ('-out:' + (Join-Path $package 'HotReloadTool.dll')) (Join-Path $repo 'src\Bootstrap.cs') (Join-Path $repo 'src\SyncPacket.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap compilation failed' }
-$core = @('HotReload','ModBrowserCore','ModBrowserUi','ModPack','ModFiles','FriendSync','InstallQueue') | ForEach-Object { Join-Path $repo ('src\' + $_ + '.cs') }
+$core = @('HotReload','ModBrowserCore','ModBrowserUi','ModPack','ModFiles','FriendSync','InstallQueue','ModCompiler') | ForEach-Object { Join-Path $repo ('src\' + $_ + '.cs') }
 & $Compiler @options ('-r:' + (Join-Path $package 'HotReloadTool.dll')) ('-out:' + (Join-Path $package 'core\HotReloadCore.dll')) @core
 if ($LASTEXITCODE -ne 0) { throw 'Core compilation failed' }
 Copy-Item -LiteralPath (Join-Path $repo 'ModInfo.xml') -Destination $package -Force

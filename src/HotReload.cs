@@ -1815,7 +1815,6 @@ namespace HotReloadTool
                 Directory.CreateDirectory(cache);
                 var name = SafeName(mod != null ? mod.Name : Path.GetFileName(folder));
                 var outDll = Path.Combine(cache, name + ".dll");
-                var rsp = Path.Combine(cache, name + ".rsp");
 
                 var refs = new List<string>();
                 var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1829,48 +1828,17 @@ namespace HotReloadTool
                 if (Directory.Exists(libdir))
                     foreach (var f in Directory.GetFiles(libdir, "*.dll")) { if (seen.Add(Path.GetFileName(f))) refs.Add(f); }
 
-                var lines = new List<string>();
-                lines.Add("-nologo");
-                lines.Add("-target:library");
-                lines.Add("-platform:x64");
-                lines.Add("-langversion:latest");
-                lines.Add("-nowarn:1701,1702,1705,0169,0618,0649,0219,0414");
-                lines.Add("-out:\"" + outDll + "\"");
-                foreach (var r in refs) lines.Add("-r:\"" + r + "\"");
-                foreach (var s in srcs) lines.Add("\"" + s + "\"");
-                File.WriteAllLines(rsp, lines.ToArray());
-
-                var psi = new ProcessStartInfo();
-                psi.FileName = _cscPath;
-                psi.Arguments = "-noconfig -nologo @\"" + rsp + "\"";
-                psi.UseShellExecute = false;
-                psi.CreateNoWindow = true;
-                psi.RedirectStandardOutput = true;
-                psi.RedirectStandardError = true;
-                psi.WorkingDirectory = folder;
-
-                string outp, errp;
-                using (var p = Process.Start(psi))
+                var compiled = ModCompiler.Compile(_cscPath, srcs, refs, outDll);
+                if (!compiled.Success)
                 {
-                    bool exited = p.WaitForExit(30000);
-                    outp = p.StandardOutput.ReadToEnd();
-                    errp = p.StandardError.ReadToEnd();
-                    if (!exited || !p.HasExited)
-                    {
-                        try { p.Kill(); } catch { }
-                        b.error = "compiler timed out";
-                        return b;
-                    }
-                }
-                if (!File.Exists(outDll))
-                {
-                    b.error = "compile failed: " + FirstLines(outp + "\n" + errp, 6);
+                    b.error = "compile failed (previous DLL kept):\n" + compiled.Diagnostics;
                     return b;
                 }
-                b.bytes = File.ReadAllBytes(outDll);
+                b.bytes = compiled.Bytes;
                 b.outDll = outDll;
                 b.compiled = true;
-                b.hash = "s:" + SrcMarker(folder);
+                // Keep the input marker captured BEFORE compiling. A save during
+                // this build must remain a new change for the completion pass.
                 return b;
             }
             catch (Exception e)
@@ -2501,14 +2469,7 @@ namespace HotReloadTool
             return false;
         }
 
-        static string FirstLines(string s, int n)
-        {
-            if (string.IsNullOrEmpty(s)) return "(no compiler output)";
-            var parts = s.Replace("\r\n", "\n").Split('\n');
-            var o = "";
-            for (int i = 0; i < parts.Length && i < n; i++) { if (i > 0) o += " | "; o += parts[i]; }
-            return o;
-        }
+
     }
 
     // -------------------------------------------------------------------
