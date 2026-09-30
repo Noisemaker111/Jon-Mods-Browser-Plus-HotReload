@@ -1,0 +1,5 @@
+<configs>
+  <append xpath="/templates/party_entry/rect">
+    <button name="jonFollowTarget" depth="9" width="200" height="37" color="255,255,255,0" defaultcolor="255,255,255,0" hovercolor="255,255,255,12" selectedcolor="255,255,255,12" style="press, hover" tooltip="Open inventory, then right-click to follow"/>
+  </append>
+</configs>

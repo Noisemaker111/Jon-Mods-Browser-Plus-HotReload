@@ -1,4 +1,4 @@
-# Compatibility alias; QoL is published separately from the manager.
+# Compatibility alias; every gameplay feature is published separately.
 param(
     [string]$GamePath = 'C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die',
     [string]$OutputPath

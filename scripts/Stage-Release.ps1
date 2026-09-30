@@ -1,6 +1,7 @@
 param(
     [string]$GamePath = 'C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die',
-    [string]$OutputPath
+    [string]$OutputPath,
+    [switch]$IncludeManager
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
@@ -18,12 +19,15 @@ if ($LASTEXITCODE -ne 0 -or $dirty) { throw 'Commit the reviewed source before r
 $revision = & git -C $repo rev-parse HEAD
 $work = Join-Path $scratch ('release-stage-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work,$OutputPath -Force | Out-Null
-& (Join-Path $PSScriptRoot 'build.ps1') -GamePath $GamePath -OutputPath (Join-Path $work 'manager')
-$built = & (Join-Path $PSScriptRoot 'Build-Mod.ps1') -ModFolder (Join-Path $repo 'mods\JonCoopQoL') -GamePath $GamePath -OutputPath (Join-Path $work 'qol')
-$archives = @(
-    @{ Path=(Join-Path $work 'JonModsBrowser-Plus-HotReload-beta.zip'); Folder='HotReloadTool'; Source=(Join-Path $work 'manager\HotReloadTool') },
-    @{ Path=$built.Archive; Folder='JonCoopQoL'; Source=(Join-Path (Split-Path $built.Archive -Parent) 'JonCoopQoL') }
-)
+$folders = @(Get-ChildItem -LiteralPath (Join-Path $repo 'mods') -Directory | Select-Object -ExpandProperty FullName)
+$built = @(& (Join-Path $PSScriptRoot 'Build-Mod.ps1') -ModFolder $folders -GamePath $GamePath -OutputPath (Join-Path $work 'gameplay'))
+$archives = @($built | ForEach-Object { @{ Path=$_.Archive; Folder=$_.Name; Source=(Join-Path (Split-Path $_.Archive -Parent) $_.Name) } })
+if ($IncludeManager) {
+    & (Join-Path $PSScriptRoot 'build.ps1') -GamePath $GamePath -OutputPath (Join-Path $work 'manager')
+    $archives += @{ Path=(Join-Path $work 'JonModsBrowser-Plus-HotReload-beta.zip'); Folder='HotReloadTool'; Source=(Join-Path $work 'manager\HotReloadTool') }
+    $identity = Get-Content -LiteralPath (Join-Path $work 'manager\HotReloadTool\build.json') -Raw | ConvertFrom-Json
+    if ($identity.revision -ne $revision) { throw 'Manager revision differs from staged source' }
+}
 foreach ($archive in $archives) {
     $extracted = Join-Path $work ('extract-' + $archive.Folder)
     Expand-Archive -LiteralPath $archive.Path -DestinationPath $extracted
@@ -39,7 +43,5 @@ foreach ($archive in $archives) {
     Copy-Item -LiteralPath $archive.Path,($archive.Path + '.sha256') -Destination $OutputPath
     Write-Output ('Verified standalone download: ' + (Join-Path $OutputPath (Split-Path $archive.Path -Leaf)))
 }
-$identity = Get-Content -LiteralPath (Join-Path $work 'manager\HotReloadTool\build.json') -Raw | ConvertFrom-Json
-if ($identity.revision -ne $revision) { throw 'Manager revision differs from staged source' }
 Write-Output ('Source revision: ' + $revision)
 Write-Output 'Downloads are separate ordinary mod folders. Building never installs, launches or publishes.'

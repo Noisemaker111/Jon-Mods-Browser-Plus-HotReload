@@ -1,0 +1,6 @@
+<configs>
+  <set xpath="/windows/window[@name='windowGroupBars']/grid[@name='hud'][@controller='PartyEntryList']/@cell_height">82</set>
+  <set xpath="/windows/window[@name='windowGroupBars']/grid[@name='hud'][@controller='PartyEntryList']/@cell_width">310</set>
+  <set xpath="/windows/window[@name='windowGroupBars']/grid[@name='hud'][@controller='PartyEntryList']/@width">310</set>
+  <set xpath="/windows/window[@name='windowGroupBars']/grid[@name='hud'][@controller='PartyEntryList']/@pos">9,-140</set>
+</configs>

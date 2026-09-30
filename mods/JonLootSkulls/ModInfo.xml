@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <Name value="JonLootSkulls"/>
+  <DisplayName value="Jon’s Loot Skulls"/>
+  <Description value="Skulls and remaining respawn time above emptied loot locations."/>
+  <Author value="Jon"/>
+  <Version value="0.2.0"/>
+</xml>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <Name value="JonFollow"/>
+  <DisplayName value="Jon’s Follow"/>
+  <Description value="Right-click party Follow on foot and in ground vehicles."/>
+  <Author value="Jon"/>
+  <Version value="0.2.0"/>
+</xml>

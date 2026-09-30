@@ -4,7 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using Mono.Cecil;
-using JonCoopQoL;
+using JonLootSkulls;
+using JonSharedWaypoints;
 using HotReloadTool;
 
 static class CoopChecks
@@ -35,7 +36,7 @@ static class CoopChecks
     {
         if (!items.ContainsKey(name)) throw new Exception("Native item definition missing: " + name);
         var tags = new HashSet<string>(Split(Property(name,"Tags")),StringComparer.OrdinalIgnoreCase);
-        return Rules.Category(name,Split(Property(name,"Group")),tags.Contains,false);
+        return JonCategoryStorage.Rules.Category(name,Split(Property(name,"Group")),tags.Contains,false);
     }
     static int Main(string[] args)
     {
@@ -49,18 +50,18 @@ static class CoopChecks
             Check(reading.Any(x => x.EndsWith("SkillMagazine")) && reading.Any(x => x.EndsWith("Schematic")) && reading.Any(x => x.StartsWith("book")),"native reading set covers magazines, perk books and schematics");
             var seed = reading.First(x => x.StartsWith("book"));
             var chest = new HashSet<string>(StringComparer.Ordinal) { Category(seed) };
-            Check(reading.All(x => Rules.MatchesDestination(false,chest,Category(x))),"one native book routes all " + reading.Length + " native reading definitions");
-            Check(!Rules.MatchesDestination(false,chest,Category("gunHandgunT1Pistol")),"book chest rejects a pistol");
-            Check(Rules.MatchesDestination(true,null,"other"),"native exact-item match remains valid without a category context");
-            Check(!Rules.MatchesDestination(false,new HashSet<string>(),Category(seed)),"empty destination does not accept an arbitrary category");
+            Check(reading.All(x => JonCategoryStorage.Rules.MatchesDestination(false,chest,Category(x))),"one native book routes all " + reading.Length + " native reading definitions");
+            Check(!JonCategoryStorage.Rules.MatchesDestination(false,chest,Category("gunHandgunT1Pistol")),"book chest rejects a pistol");
+            Check(JonCategoryStorage.Rules.MatchesDestination(true,null,"other"),"native exact-item match remains valid without a category context");
+            Check(!JonCategoryStorage.Rules.MatchesDestination(false,new HashSet<string>(),Category(seed)),"empty destination does not accept an arbitrary category");
             var blocks = new XmlDocument { XmlResolver = null }; blocks.Load(Path.Combine(Path.GetDirectoryName(args[0]),"blocks.xml"));
             var corn = (XmlElement)blocks.SelectSingleNode("/blocks/block[@name='plantedCorn1']");
-            Check(corn != null && Rules.Category(corn.GetAttribute("name"),null,x=>false,true) != Category("resourceWood") && Rules.Category(corn.GetAttribute("name"),null,x=>false,true) != Rules.Category("woodShapes",null,x=>false,true),"native seed blocks route separately from building blocks and resources");
+            Check(corn != null && JonCategoryStorage.Rules.Category(corn.GetAttribute("name"),null,x=>false,true) != Category("resourceWood") && JonCategoryStorage.Rules.Category(corn.GetAttribute("name"),null,x=>false,true) != JonCategoryStorage.Rules.Category("woodShapes",null,x=>false,true),"native seed blocks route separately from building blocks and resources");
             Check(Category("medicalFirstAidBandage") == Category("medicalFirstAidKit"),"medicine seed routes other medicine");
             Check(Category("foodCanChili") == Category("drinkJarBoiledWater"),"food and drink share a destination category");
             var mods = items.Keys.Where(x => !Reading(x) && Split(Property(x,"Group")).Contains("Mods")).ToArray();
             Check(mods.Length > 50 && mods.All(x => Category(x) == "08 Item mods"),"one attachment routes all " + mods.Length + " native item-mod definitions, including inherited groups");
-            Check(Rules.Category("customAttachment",new[]{"Mods","Ranged Weapons"},x=>x=="weapon",false)=="08 Item mods" && Rules.Category("modGunBarrelExtenderSchematic",null,x=>false,false)=="01 Books","item mods outrank weapon tags; their schematics stay in books");
+            Check(JonCategoryStorage.Rules.Category("customAttachment",new[]{"Mods","Ranged Weapons"},x=>x=="weapon",false)=="08 Item mods" && JonCategoryStorage.Rules.Category("modGunBarrelExtenderSchematic",null,x=>false,false)=="01 Books","item mods outrank weapon tags; their schematics stay in books");
             var ammo = items.Keys.Where(x => !Reading(x) && Split(Property(x,"Group")).Contains("Ammo")).ToArray();
             Check(ammo.Length > 20 && ammo.All(x => Category(x)=="04 Ammunition"),"one ammunition seed routes all " + ammo.Length + " native ammo definitions separately from weapons");
             var tools = items.Keys.Where(x => !Reading(x) && Split(Property(x,"Group")).Contains("Tools/Traps") && !Split(Property(x,"Group")).Contains("Mods")).ToArray();
@@ -70,9 +71,9 @@ static class CoopChecks
             Check(new[]{Category("modGunBarrelExtender"),Category("ammo9mmBulletBall"),Category("gunHandgunT1Pistol"),Category("meleeToolRepairT0StoneAxe"),Category("armorLumberjackBoots"),Category("resourceWood"),Category("vehicleBicycleChassis")}.Distinct().Count()==7,"mods, ammo, weapons, tools, armor, resources and vehicle parts remain separate destinations");
             CheckTeamProtocol();
 
-            Check(!Rules.RespawnDue(100,819,30) && Rules.RespawnDue(100,820,30),"skull expiry matches native whole-hour / day eligibility");
-            Check(!Rules.RespawnDue(100,20000,0) && !Rules.RespawnDue(100,99,30),"disabled respawn and reversed clock keep markers");
-            Check(!Rules.RespawnDue(110,820,30),"nearby-player native clock deferral extends skull duration");
+            Check(!JonLootSkulls.Rules.RespawnDue(100,819,30) && JonLootSkulls.Rules.RespawnDue(100,820,30),"skull expiry matches native whole-hour / day eligibility");
+            Check(!JonLootSkulls.Rules.RespawnDue(100,20000,0) && !JonLootSkulls.Rules.RespawnDue(100,99,30),"disabled respawn and reversed clock keep markers");
+            Check(!JonLootSkulls.Rules.RespawnDue(110,820,30),"nearby-player native clock deferral extends skull duration");
             string file = Path.Combine(args[1],"world-a","loot-skulls.xml");
             var ledger = new LootLedger();
             ledger.Records.Add("1,2,3",new LootRecord { Key="1,2,3", X=1,Y=2,Z=3,PoiId=15,AnchorX=11.5f,AnchorY=20,AnchorZ=-30,TouchedHours=100 });
@@ -85,13 +86,13 @@ static class CoopChecks
             ledger.Load(Path.Combine(args[1],"world-b","loot-skulls.xml"));
             Check(ledger.Records.Count == 0,"another world cannot inherit the previous world's skulls");
 
-            var drive = Rules.VehicleControl(70,15,8,8,false);
+            var drive = JonFollow.Rules.VehicleControl(70,15,8,8,false);
             Check(drive.Forward > 0 && drive.Steer > 0 && !drive.Brake,"moving ground vehicle follows ahead and steers toward friend");
-            drive = Rules.VehicleControl(20,-15,15,0,false);
+            drive = JonFollow.Rules.VehicleControl(20,-15,15,0,false);
             Check(drive.Brake && drive.Forward == 0 && drive.Steer < 0,"closing speed brakes before reaching stopped friend's vehicle");
-            Check(Rules.VehicleControl(70,0,5,5,true).Brake && Rules.VehicleControl(4,0,0,0,false).Forward == 0,"obstruction, cliff or arrival suppresses vehicle acceleration");
-            Check(Rules.CancelFollow(true,false,false,true,20) && Rules.CancelFollow(false,false,true,true,20) && Rules.CancelFollow(false,false,false,false,20) && Rules.CancelFollow(false,false,false,true,201) && !Rules.CancelFollow(false,false,false,true,20),"manual input, death, party departure and lost range cancel follow");
-            CheckNativePatches(args[2],args[3]);
+            Check(JonFollow.Rules.VehicleControl(70,0,5,5,true).Brake && JonFollow.Rules.VehicleControl(4,0,0,0,false).Forward == 0,"obstruction, cliff or arrival suppresses vehicle acceleration");
+            Check(JonFollow.Rules.CancelFollow(true,false,false,true,20) && JonFollow.Rules.CancelFollow(false,false,true,true,20) && JonFollow.Rules.CancelFollow(false,false,false,false,20) && JonFollow.Rules.CancelFollow(false,false,false,true,201) && !JonFollow.Rules.CancelFollow(false,false,false,true,20),"manual input, death, party departure and lost range cancel follow");
+            CheckNativePatches(args[2],args.Skip(3).ToArray());
             Console.WriteLine(checks + " co-op checks passed; native gameplay still requires an in-game session.");
             return 0;
         }
@@ -128,15 +129,18 @@ static class CoopChecks
         Check(decoded.X==10.5f && decoded.NY==1 && decoded.Heading==33,"team pings preserve world-space ground position, normal and heading");
         ping.X=float.NaN; rejected=false; try { Wire(ping); } catch(InvalidDataException) { rejected=true; }
         Check(rejected,"invalid ping coordinates are rejected before rendering or relay");
-        Check(TeamProtocol.PingAlpha(0)==1 && TeamProtocol.PingAlpha(4)==1 && TeamProtocol.PingAlpha(5)==0.5f && TeamProtocol.PingAlpha(6)==0 && TeamProtocol.PingAlpha(20)==0,"ground arrows fade over the last two seconds and expire at six seconds");
-        Check(TeamProtocol.PingScale(0.15f)!=TeamProtocol.PingScale(0.5f),"ground arrow geometry changes scale during its pulse");
+        Check(JonGroundPings.TeamProtocol.PingAlpha(0)==1 && JonGroundPings.TeamProtocol.PingAlpha(4)==1 && JonGroundPings.TeamProtocol.PingAlpha(5)==0.5f && JonGroundPings.TeamProtocol.PingAlpha(6)==0 && JonGroundPings.TeamProtocol.PingAlpha(20)==0,"ground arrows fade over the last two seconds and expire at six seconds");
+        Check(JonGroundPings.TeamProtocol.PingScale(0.15f)!=JonGroundPings.TeamProtocol.PingScale(0.5f),"ground arrow geometry changes scale during its pulse");
     }
-    static void CheckNativePatches(string gameDll, string modDll)
+    static void CheckNativePatches(string gameDll, string[] modDlls)
     {
         using(var game = AssemblyDefinition.ReadAssembly(gameDll))
-        using(var mod = AssemblyDefinition.ReadAssembly(modDll))
         {
             int targets = 0;
+            foreach(var modDll in modDlls)
+            using(var mod = AssemblyDefinition.ReadAssembly(modDll))
+            {
+            Check(!mod.MainModule.AssemblyReferences.Any(x=>x.Name=="HotReloadTool"||x.Name=="JonCoopQoL"),"individual gameplay assembly has no manager or combined-mod dependency: "+mod.Name);
             foreach(var type in mod.MainModule.Types)
                 foreach(var patch in type.CustomAttributes.Where(x=>x.AttributeType.FullName == "HarmonyLib.HarmonyPatch"))
                 {
@@ -159,6 +163,8 @@ static class CoopChecks
                         }
                     targets++;
                 }
+            }
+            Check(modDlls.Length == 6,"all six independent packaged assemblies are checked" );
             Check(targets >= 15,"all " + targets + " Harmony targets and indexed parameters resolve against the installed game");
             var stash = game.MainModule.Types.Single(x=>x.Name == "XUiM_LootContainer").Methods.Single(x=>x.Name == "StashItems");
             var calls = stash.Body.Instructions.Select(x=>x.Operand as MethodReference).Where(x=>x!=null).ToArray();

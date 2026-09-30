@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <Name value="JonPartyPortraits"/>
+  <DisplayName value="Jon’s Party Portraits"/>
+  <Description value="Party character portraits, health and stamina bars on the left."/>
+  <Author value="Jon"/>
+  <Version value="0.2.0"/>
+</xml>
