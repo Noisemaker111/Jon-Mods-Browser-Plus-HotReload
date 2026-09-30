@@ -1,54 +1,43 @@
 # Jon's Mod Browser + Hot Reload
 
-A **MODS** button for 7 Days to Die (V1.0+ / V3.x). Browse, search, and install **3,800+ mods from [7daystodiemods.com](https://www.7daystodiemods.com)** without ever leaving the game — version-matched to your game, with real card pictures, and every install **hot-loads instantly: no restart, ever**.
+An in-game **MODS** button, mod manager and hot reload tools for 7 Days to Die on Windows. This beta adds portable packs containing the actual mod files and host-to-friend downloads over the game's connection. Built against game **V3.2**.
 
-![The in-game Mods window](docs-screenshot.png)
+## Download and install
 
-## Why
+1. Download the ZIP attached to the [GitHub beta release](https://github.com/Noisemaker111/Jon-Mods-Browser-Plus-HotReload/releases/tag/v6.3.0-beta.1) and extract the whole archive.
+2. Close the game, then double-click **Install.cmd**. It installs `HotReloadTool` in `%AppData%\7DaysToDie\Mods`, verifies the files and preserves your browser data, saved packs and backups. It refuses installation while the game is running.
+3. Double-click **Play.cmd** to open the game without EAC. Click **MODS** in the main menu or pause menu.
 
-The normal loop is alt-tab → website → check versions → download zip → extract into Mods → relaunch the game → repeat. This mod replaces that whole loop with one button in the main menu:
+Both friends need this same release, the same game build and EAC disabled for the modded world. This is a code mod; it cannot load in an EAC-protected session.
 
-- **Browse** the whole catalog in-game (split view: Downloaded | Browse), floating over the game — no dimming, no blur
-- **Live search** (auto-runs as you type), category chips, sorting, paging
-- **One-click install / update / remove** — mods hot-load in seconds
-- **Pack codes** — share your whole modlist as one short `HRP1-…` string; friends paste it and everything installs itself
-- **Server pack push** — server owners run `hr pack apply <code>` once; every player who joins gets a one-click "Install pack" prompt
-- **Hot reload engine** for mod authors: edit any mod's XML/XUI/localization/C# while playing and it re-applies in seconds. The tool even hot-swaps *itself*.
+For a manual swap, copy the included `HotReloadTool` folder into your active Mods folder after closing the game. Keep the previous folder in a sibling `Mods-offline` folder outside active Mods. Have only one active copy of the manager across the user Mods folder and the game's legacy Mods folder. The download never installs itself or checks for tool updates.
 
-## Install (2 minutes)
+## Playing with a friend
 
-1. Grab the zip from [Releases](../../releases).
-2. Unzip, then drop the `HotReloadTool` folder into your Mods folder — either:
-   - `%AppData%\7DaysToDie\Mods` (easiest — paste that into Explorer's address bar), or
-   - `<game folder>\Mods`
-   
-   Final path must look like `...\Mods\HotReloadTool\ModInfo.xml`
-3. Launch the game → click **MODS**. Done.
+The player hosting the world supplies the shared mod set. After authentication, the client waits before loading the world while the tool compares file checksums, including manually installed mods from both Mods locations. Matching players continue joining. Different mods are downloaded from the host through the existing game connection; no separate port or catalog account is needed. Changes to the host's mods also notify connected friends. A failed initial check cancels joining instead of loading a mismatched world.
 
-No other dependencies. Nothing outside the Mods folder is touched; delete the folder to uninstall.
+After receiving a different pack, the client leaves the world, verifies every file and installs the host's exact set. **Restart the game and rejoin** to load DLLs, assets and configuration through normal game startup. Existing versions and client-only extra mods are moved into `HotReloadTool\browser\backups`, including mods replaced from the legacy location. The manager and the game's required Harmony mod are preserved. Mods added only on a joining friend's machine do not change the host's set.
 
-## Console (F1)
+The previous release's local `serverpack.txt` marker did not transmit anything over the network. This beta replaces that behavior with a registered game network package. Large packs take time to compress and transfer. A failed or interrupted transfer does not replace installed mods; reconnect to retry.
 
-```
-hr status              what the tool is doing
-hr doctor              full engine-API self-check
-hr browser open        open the Mods window
-hr pack make <name>    build a pack code from your browser-installed mods
-hr pack apply <code>   install a pack (server owners: use this one)
-hr pack list           saved packs
-hr watch               live-reload on file save (mod authors)
-```
+## Packs and the browser
 
-## For mod authors
+Open **MODS → pack**, enter a name and choose **Export portable pack**. A `.hrpack` archive appears in the saved packs list. It includes actual versions and files, even for manually installed mods. Choose **install** on a saved archive, or paste a full `.hrpack` path into the import box. Leave the world before importing; restart afterwards. Portable import merges a pack with local mods. Automatic friend sync installs the host's exact set.
 
-Drop your mod anywhere under `%AppData%\7DaysToDie\Mods`, keep editable sources in `YourMod\src\*.cs`, and enable the watcher (`hr watch`). Save a file → it recompiles/patches and hot-swaps in ~4 seconds, including prebuilt DLL mods. `hr doctor` verifies the environment.
+Older `HRP1-…` catalog codes still work when the catalog is available. These codes contain catalog slugs, so they do not pin file versions and cannot contain manual mods. Invalid codes, missing mods and failed imports produce visible status messages. Repeated clicks do not queue duplicate installations; a failed download no longer stalls subsequent installs.
 
-## How it works (short version)
+The browser defaults to Jon's catalog at `https://7d2dmods.gg/api`. **That domain was unreachable during this release's verification.** Fresh browsing and catalog downloads remain unavailable until its service is restored. Cached results, installed-mod management, portable packs and direct host transfers are separate from that service. No other site's catalog is fetched automatically.
 
-The bootstrap DLL stays stable and intercepts the game's mod-DLL loader; everything else lives in a core DLL that byte-loads and hot-swaps at runtime. The Mods window is an IMGUI overlay driven by a Harmony postfix on the window manager's OnGUI, with the catalog served by the public `api.7daystodiemods.com/v1` API (thumbnails cached on disk, prefetched as you scroll, hard data cap per session).
+## Hot reload
 
-## License
+The existing XML, XUI, localization, supported C# mod reload and core swap tools are retained. File-change events trigger debounced work rather than repeated directory checks. Some mods retain runtime state or require startup registration; use a full restart for those mods and after changing a multiplayer pack. The bootstrap containing the network package requires restart when updated.
 
-MIT — do whatever, attribution appreciated. Not affiliated with The Fun Pimps or 7daystodiemods.com.
+Useful F1 console commands: `hr status`, `hr doctor`, `hr browser open`, `hr browser sync`, `hr pack export <name>`, `hr pack import <full path>` and the existing reload commands. Game saves are not modified by installation.
 
-— *by Noisemakerjon*
+## Verification and source
+
+The release has production-source checks for pack save/reload, both Mods locations, exact file matching, protected manager identity, version mismatch, corrupt/interrupted archives, traversal, replacement rollback and queue recovery after failure. Both DLLs compile against the installed game's actual assemblies.
+
+An earlier build in this work loaded in an isolated V3.2 dedicated game and its engine API check reported 19 passes and 0 failures. **The final MODS controls, two-player join/download/restart/rejoin flow and live host changes have not been exercised in the game.** The computer-use service was unavailable, and Jon requested that game testing stop while he plays. This remains a prerelease, not a claim of verified multiplayer compatibility.
+
+Source is in `src/`. `scripts/build.ps1` accepts the game and Roslyn compiler paths and creates a ZIP without installing or launching it. `scripts/test.ps1` runs the production archive and install-queue checks in the checkout home's `.scratch` directory. Game assemblies are references only and are not redistributed. `HotReloadTool/build.json` records the source revision, reference assembly digest and release-file checksums.

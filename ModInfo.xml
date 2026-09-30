@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <xml>
     <Name value="HotReloadTool" />
-    <DisplayName value="Hot Reload Tool + Mods" />
-    <Description value="Hot reload EVERYTHING with no restart (mods, XML/XUI/loc, C#, the tool itself, engine-self-check) PLUS an in-game Mod Browser: browse/search 3800+ mods from 7daystodiemods.com filtered to your game version, see cards with author/size/version, and install/update/remove mods with zero restarts. F1 console: 'hr status' | 'hr browser open'." />
+    <DisplayName value="Jon's Mod Browser + Hot Reload (beta)" />
+    <Description value="In-game mod browser and manager, live XML/XUI/localization and supported code reload, portable packs with verified files, and automatic host-to-friend mod downloads. Restart after installing a different multiplayer pack. F1 console: hr status | hr browser open." />
     <Author value="Noisemakerjon" />
-    <Version value="6.2.0" />
-    <Website value="https://7daystodiemods.com" />
+    <Version value="6.3.0" />
+    <Website value="https://github.com/Noisemaker111/Jon-Mods-Browser-Plus-HotReload" />
 </xml>
