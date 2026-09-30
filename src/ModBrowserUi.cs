@@ -156,6 +156,7 @@ namespace HotReloadTool
             foreach (var type in new[] { typeof(XUiC_MainMenuButtons), typeof(XUiC_InGameMenuWindow) })
             {
                 var method = AccessTools.Method(type, "OnOpen");
+                if (method != null) method = AccessTools.DeclaredMethod(method.DeclaringType, "OnOpen");
                 if (method != null && targets.Add(method)) _harmony.Patch(method, postfix: new HarmonyMethod(typeof(BrowserUi), "MenuOpened"));
             }
         }
@@ -456,6 +457,12 @@ namespace HotReloadTool
 
         public static void OnGuiPostfix()
         {
+            if (FriendSync.ShowNotice && !IsOpen)
+            {
+                var style = new GUIStyle(GUI.skin.box) { fontSize = 20, wordWrap = true, alignment = TextAnchor.MiddleCenter };
+                var width = Math.Min(1000f, Screen.width - 40f);
+                GUI.Box(new Rect((Screen.width - width) / 2f, Screen.height - 130f, width, 90f), FriendSync.Status, style);
+            }
             if (!IsOpen) return;
             try { DrawOverlay(); }
             catch (Exception e) { Log.Error("[HotReload] browser draw: " + e.Message); }

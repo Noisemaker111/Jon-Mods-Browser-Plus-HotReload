@@ -66,10 +66,10 @@ party, world cleanup or source reload; your original saved waypoints remain
 yours. Automatic vehicle/drone waypoints are left to the native game. A
 teammate deleting a shared copy locally does not delete the owner's original.
 
-Both friends and the host need this JonCoopQoL and its matching staged
+Both friends and the host need this JonCoopQoL and its matching beta
 HotReloadTool. The new team channel lives in the manager bootstrap and needs
 one game restart when swapping these files. Subsequent supported QoL source
-edits keep the same native package identity. The old published manager cannot
+edits keep the same native package identity. Older managers cannot
 relay this channel. No separate service, polling timer or manager auto-update
 is added. The host authenticates owners and only relays within their party.
 
@@ -89,6 +89,7 @@ deletions, malformed packets, ownership/world checks, ping fade/pulse timing,
 vehicle decisions, cancellation rules and native patch signatures. Pack
 and compiler checks also pass. Native portraits, Tab/right-click, walking,
 driving, ground-arrow input/rendering, native shared-map controls, loot
-replication and two-player download/rejoin have not been
-exercised in this build because Jon is playing. No running game or active
-mod folder was changed by building or staging it.
+replication and two-player download/rejoin still need gameplay verification.
+Both mods initialize in native V3.2. A native source reload replaced 27 old
+patches with zero initialization failures and published the startup DLL.
+Building and staging do not change the active installation.

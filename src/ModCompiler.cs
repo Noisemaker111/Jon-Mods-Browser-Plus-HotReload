@@ -10,6 +10,17 @@ namespace HotReloadTool
     // Shared by live editing and the offline mod build/package workflow.
     public static class ModCompiler
     {
+        public static void Publish(byte[] bytes, string destination)
+        {
+            var temporary = destination + ".publish-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.WriteAllBytes(temporary, bytes);
+                if (File.Exists(destination)) File.Replace(temporary, destination, null);
+                else File.Move(temporary, destination);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
         public class Result
         {
             public bool Success;
@@ -18,13 +29,15 @@ namespace HotReloadTool
             public long Milliseconds;
         }
 
-        public static Result Compile(string compiler, IEnumerable<string> sources, IEnumerable<string> references, string destination, int timeoutMilliseconds = 30000)
+        public static Result Compile(string compiler, IEnumerable<string> sources, IEnumerable<string> references, string destination, int timeoutMilliseconds = 30000, bool freshIdentity = false)
         {
             var clock = Stopwatch.StartNew();
             var result = new Result();
             var parent = Path.GetDirectoryName(Path.GetFullPath(destination));
             var temporary = Path.Combine(parent, ".compile-" + Guid.NewGuid().ToString("N"));
-            var output = Path.Combine(temporary, Path.GetFileName(destination));
+            // Unity caches component types by assembly identity. A live rebuild
+            // must have its own identity even though the on-disk cache stays stable.
+            var output = Path.Combine(temporary, freshIdentity ? Path.GetFileNameWithoutExtension(destination) + "_live_" + Guid.NewGuid().ToString("N") + ".dll" : Path.GetFileName(destination));
             var response = Path.Combine(temporary, "build.rsp");
             try
             {

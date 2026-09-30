@@ -10,6 +10,7 @@ namespace HotReloadTool
     public static class FriendSync
     {
         public static string Status = "Friends: host mods sync automatically on join";
+        public static bool ShowNotice;
         public static string GameVersion { get { return Constants.cVersionMajor + "." + Constants.cVersionMinor + "." + Constants.cVersionBuild; } }
         static string session;
         static string archive;
@@ -59,6 +60,7 @@ namespace HotReloadTool
         {
             lock (gate)
             {
+                if (resumeJoin != null && !Installing && !HotReloadCore.RestartRequired) ShowNotice = false;
                 connected = false;
                 resumeJoin = null;
                 comparing = false;
@@ -83,6 +85,7 @@ namespace HotReloadTool
                 connected = true;
                 session = Guid.NewGuid().ToString("N");
                 Status = "Friends: checking host mods...";
+                ShowNotice = true;
                 try { Send(new JObject { ["kind"] = "hello", ["session"] = session, ["game"] = GameVersion, ["protocol"] = 1 }, null); }
                 catch (Exception e) { Fail("Host does not support this sync release: " + e.Message); return; }
                 ArmTimeout();
@@ -123,6 +126,7 @@ namespace HotReloadTool
                 waiting = resumeJoin != null;
                 resumeJoin = null;
                 Status = "Friends: " + message;
+                ShowNotice = true;
                 connected = false;
                 comparing = false;
                 session = null;
@@ -295,6 +299,7 @@ namespace HotReloadTool
                 if (matches)
                 {
                     Status = "Friends: mods match the host";
+                    ShowNotice = false;
                     Send(new JObject { ["kind"] = "received", ["session"] = session, ["hash"] = message["hash"] }, null);
                     Log.Out("[HotReload] " + Status);
                     var resume = resumeJoin; resumeJoin = null;

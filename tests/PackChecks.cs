@@ -92,6 +92,17 @@ class PackChecks
             Mod(legacyHost, "Conflicting", "SharedMod", "duplicate identity");
             Reject(() => ModFiles.Export(new[] { host, legacyHost }, both, "Broken", "3.2.0"), "duplicate mod identities across roots are rejected");
             Check((string)ModFiles.ReadManifest(both)["name"] == "Updated name", "a failed re-export preserves the previous saved pack");
+            string sourceMods = Path.Combine(work, "source-mods");
+            Mod(sourceMods, "SourceLive", "SourceLive", "config");
+            Directory.CreateDirectory(Path.Combine(sourceMods, "SourceLive", "src"));
+            Directory.CreateDirectory(Path.Combine(sourceMods, "SourceLive", "cache"));
+            File.WriteAllText(Path.Combine(sourceMods, "SourceLive", "src", "Mod.cs"), "public class Mod {}");
+            File.WriteAllText(Path.Combine(sourceMods, "SourceLive", "SourceLive.dll"), "native startup code");
+            var sourceIdentity = ModFiles.Fingerprint(ModFiles.Inventory(sourceMods, "Sources", "3.2.0"));
+            File.WriteAllText(Path.Combine(sourceMods, "SourceLive", "cache", "SourceLive.dll"), "fresh local identity");
+            Check(sourceIdentity == ModFiles.Fingerprint(ModFiles.Inventory(sourceMods, "Sources", "3.2.0")), "local source compiler caches cannot trigger repeated friend downloads");
+            File.WriteAllText(Path.Combine(sourceMods, "SourceLive", "ModInfo.xml"), "<xml><ModInfo><Name value=\"SourceLive\"/></ModInfo></xml>");
+            Check(((JArray)ModFiles.Inventory(sourceMods, "Sources", "3.2.0")["mods"]).Count == 1, "existing legacy metadata does not break the whole host pack");
             var queue = new InstallQueue();
             var releaseFirst = new ManualResetEventSlim(false);
             var finished = new ManualResetEventSlim(false);

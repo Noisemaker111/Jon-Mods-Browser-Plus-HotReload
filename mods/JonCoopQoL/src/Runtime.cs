@@ -18,7 +18,9 @@ namespace JonCoopQoL
             var gameObject = new GameObject(key);
             UnityEngine.Object.DontDestroyOnLoad(gameObject);
             gameObject.AddComponent<CoopRuntime>();
-            new Harmony("JonCoopQoL").PatchAll(typeof(ModApi).Assembly);
+            var harmony = new Harmony("JonCoopQoL");
+            harmony.UnpatchSelf();
+            harmony.PatchAll(typeof(ModApi).Assembly);
             if (GameManager.Instance?.World?.GetPrimaryPlayer() != null) CoopRuntime.Instance.OpenWorld();
             CoopRuntime.Instance.BindExistingParty();
             Log.Out("[JonCoopQoL] Loot skulls, party portraits, follow, category routing, ground pings and team waypoints loaded.");

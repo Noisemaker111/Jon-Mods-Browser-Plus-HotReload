@@ -42,7 +42,7 @@ foreach ($file in Get-ChildItem -LiteralPath $package -File -Recurse) {
     if ($file.FullName -eq (Join-Path $package 'build.json')) { continue }
     $files[$file.FullName.Substring($package.Length + 1).Replace('\','/')] = (Get-FileHash -LiteralPath $file.FullName).Hash
 }
-$identity = @{ version = '6.3.0-beta.1'; revision = $revision; gameReferences = (Get-FileHash (Join-Path $managed 'Assembly-CSharp.dll')).Hash; builtUtc = [DateTime]::UtcNow.ToString('o'); files = $files }
+$identity = @{ version = '6.3.0-beta.2'; revision = $revision; gameReferences = (Get-FileHash (Join-Path $managed 'Assembly-CSharp.dll')).Hash; builtUtc = [DateTime]::UtcNow.ToString('o'); files = $files }
 $identity | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'build.json') -Encoding UTF8
 $zip = Join-Path (Split-Path $OutputPath -Parent) 'JonModsBrowser-Plus-HotReload-beta.zip'
 Compress-Archive -Path (Join-Path $OutputPath '*') -DestinationPath $zip -Force

@@ -53,11 +53,11 @@ namespace HotReloadTool
             }
         }
 
-        static string ModName(string folder)
+        internal static string ModName(string folder)
         {
             var xml = new XmlDocument { XmlResolver = null };
             xml.Load(Path.Combine(folder, "ModInfo.xml"));
-            var name = xml.SelectSingleNode("/xml/Name/@value");
+            var name = xml.SelectSingleNode("/xml/Name/@value") ?? xml.SelectSingleNode("/xml/ModInfo/Name/@value");
             if (name == null || string.IsNullOrWhiteSpace(name.Value)) throw new InvalidDataException("Missing mod name: " + folder);
             return name.Value;
         }
@@ -73,7 +73,7 @@ namespace HotReloadTool
                         if (File.Exists(Path.Combine(dir, "ModInfo.xml")) && !Protected(Path.GetFileName(dir)) && !Protected(ModName(dir)))
                             yield return dir;
         }
-        static IEnumerable<string> Files(string directory)
+        static IEnumerable<string> Files(string directory, bool sourceRoot = true)
         {
             if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("Linked mod folders cannot be shared");
             foreach (var file in Directory.GetFiles(directory))
@@ -82,7 +82,13 @@ namespace HotReloadTool
                 yield return file;
             }
             foreach (var child in Directory.GetDirectories(directory))
-                foreach (var file in Files(child)) yield return file;
+            {
+                // Source-live compiler output is local runtime state, not mod
+                // content. Its fresh Unity identities differ after every reload.
+                if (sourceRoot && string.Equals(Path.GetFileName(child), "cache", StringComparison.OrdinalIgnoreCase)
+                    && Directory.GetDirectories(directory).Any(d => new[] { "src", "source", "sources" }.Contains(Path.GetFileName(d), StringComparer.OrdinalIgnoreCase))) continue;
+                foreach (var file in Files(child, false)) yield return file;
+            }
         }
 
         public static JObject Inventory(IEnumerable<string> roots, string name, string game)

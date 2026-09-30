@@ -36,7 +36,7 @@ namespace HotReloadTool
     // be hot-swapped underneath it at any time.
     public static class CoreEntry
     {
-        public const string CoreVersion = "6.3.0-beta.1";
+        public const string CoreVersion = "6.3.0-beta.2";
 
         public static bool Init(Mod mod)
         {
@@ -71,7 +71,7 @@ namespace HotReloadTool
 
     public static class HotReloadCore
     {
-        public const string Version = "6.3.0-beta.1";
+        public const string Version = "6.3.0-beta.2";
         public static Mod HostMod;
         public static string ModDir;
         public static string HotpackDir;
@@ -100,6 +100,7 @@ namespace HotReloadTool
         public static DateTime LastCodeReloadUtc = DateTime.MinValue;
         public static string LastCodeResult = "(none yet)";
         static volatile bool _shutting; // set by Shutdown() before a core hot-swap
+        internal static bool Retired { get { return _shutting; } }
 
         // ---------------------------------------------------------------
         // init
@@ -993,13 +994,12 @@ namespace HotReloadTool
 
         public static void RunOnMainThread(Action a)
         {
-            try { ThreadManager.AddSingleTaskMainThread("HotReload.apply", a); }
+            try { ThreadManager.AddSingleTaskMainThread("HotReload.apply", () => { if (!_shutting) a(); }); }
             catch (Exception e) { throw new InvalidOperationException("Cannot schedule game main-thread operation", e); }
         }
 
         // blocking main-thread call from a background thread (install workers, pack apply):
-        // AddSingleTaskMainThread runs the task on the main thread; we poll a flag from the
-        // pool thread until it completes. Timeout guards against a stalled main thread.
+        // Wait for that task's completion event, with a deadline for a stalled main thread.
         public static T RunOnMainThreadWithResult<T>(Func<T> f)
         {
             if (ThreadManager.IsMainThread()) return f();
@@ -1090,6 +1090,11 @@ namespace HotReloadTool
                 }
             }
             catch { }
+        }
+
+        internal static void RecordApplied(string folder)
+        {
+            _loadedMarkers[Norm(folder)] = FolderMarker(folder);
         }
 
         // our own mod's folder (hotpacks change constantly; handled by the hotpack watcher instead)
@@ -1642,6 +1647,7 @@ namespace HotReloadTool
             {
                 ThreadPool.QueueUserWorkItem(delegate(object state)
                 {
+                    if (HotReloadCore.Retired) { _busy = false; return; }
                     List<SrcBuild> builds = null;
                     try { builds = CompilePhase(force, onlyFolders); }
                     catch (Exception e) { Log.Error("[HotReload] srclive compile: " + e.Message); }
@@ -1699,6 +1705,7 @@ namespace HotReloadTool
                     try
                     {
                         Thread.Sleep(400); // let the main thread leave the executing frames
+                        if (HotReloadCore.Retired) return;
                         int n = SweepModAssemblies(mod);
                         if (n > 0) Log.Out("[HotReload] worker sweep: removed " + n + " patch(es) that were executing on the main thread");
                     }
@@ -1762,6 +1769,11 @@ namespace HotReloadTool
                         // src\ is an explicit opt-in to source-live hot-swap
                         var hash = "s:" + SrcMarker(mod.Path);
                         string prev;
+                        if (!force && !_appliedHash.ContainsKey(key) && ListModDlls(mod.Path).Count > 0)
+                        {
+                            _appliedHash[key] = hash; // Native startup already initialized the shipped DLL.
+                            continue;
+                        }
                         if (!force && _appliedHash.TryGetValue(key, out prev) && prev == hash) continue;
                         var b = CompileMod(mod, mod.Path);
                         if (b != null) builds.Add(b);
@@ -1828,7 +1840,7 @@ namespace HotReloadTool
                 if (Directory.Exists(libdir))
                     foreach (var f in Directory.GetFiles(libdir, "*.dll")) { if (seen.Add(Path.GetFileName(f))) refs.Add(f); }
 
-                var compiled = ModCompiler.Compile(_cscPath, srcs, refs, outDll);
+                var compiled = ModCompiler.Compile(_cscPath, srcs, refs, outDll, freshIdentity: true);
                 if (!compiled.Success)
                 {
                     b.error = "compile failed (previous DLL kept):\n" + compiled.Diagnostics;
@@ -1879,10 +1891,20 @@ namespace HotReloadTool
                 }
                 var asm = Assembly.Load(b.bytes);
                 _ours.Add(asm);
-                string applied = ApplyAssembly(b.mod, asm);
                 _liveAsm[KeyFor(b.folder)] = asm;
-                _appliedHash[KeyFor(b.folder)] = b.hash;
                 try { if (b.mod != null && !b.mod.allAssemblies.Contains(asm)) b.mod.allAssemblies.Add(asm); } catch { }
+                string applied = ApplyAssembly(b.mod, asm);
+                // Persist a successful source rebuild for native startup and
+                // host seeding; friends do not need a C# compiler installed.
+                if (applied.EndsWith(", 0 failed", StringComparison.Ordinal))
+                {
+                    var nativeDlls = ListModDlls(b.folder);
+                    var nativePath = nativeDlls.Count == 1 ? nativeDlls[0] : Path.Combine(b.folder, SafeName(b.mod.Name) + ".dll");
+                    if (nativeDlls.Count > 1 && !File.Exists(nativePath)) throw new InvalidOperationException("Cannot identify the primary DLL in this multi-assembly source mod");
+                    ModCompiler.Publish(b.bytes, nativePath);
+                    ModScanner.RecordApplied(b.folder);
+                }
+                _appliedHash[KeyFor(b.folder)] = b.hash;
                 int def = LastSweepDeferred;
                 _lastResult[KeyFor(b.folder)] = "ok (" + swept + " old patch(es) swept, " + applied + (def > 0 ? ", " + def + " deferred (executing)" : "") + ")";
                 var msg = "[HotReload] src-live '" + FolderName(b.folder) + "': rebuilt + hot-swapped (" + swept + " swept, " + applied
@@ -1892,6 +1914,7 @@ namespace HotReloadTool
             }
             catch (Exception e)
             {
+                Log.Error("[HotReload] src-live apply: " + e);
                 _lastResult[KeyFor(b.folder)] = "apply failed: " + e.Message;
                 return "[HotReload] src-live apply failed for '" + FolderName(b.folder) + "': " + e.Message;
             }
@@ -2111,7 +2134,7 @@ namespace HotReloadTool
                         inst.InitMod(mod);
                         inits++;
                     }
-                    catch (Exception e) { fails++; Log.Error("[HotReload] srclive InitMod " + t.Name + ": " + e.Message); }
+                    catch (Exception e) { fails++; Log.Error("[HotReload] srclive InitMod " + t.Name + ": " + e); }
                 }
             }
             return (classes + inits) + " type(s) wired, " + fails + " failed";
@@ -2422,8 +2445,13 @@ namespace HotReloadTool
                         var fi = new FileInfo(f);
                         sb += Path.GetFileName(f) + "|" + fi.Length + "|" + fi.LastWriteTimeUtc.Ticks + ";";
                     }
-                foreach (var f in Directory.GetFiles(folder, "*.dll"))
+                var rootDlls = ListModDlls(folder);
+                var primaryDll = rootDlls.Count == 1 ? rootDlls[0] : Path.Combine(folder, SafeName(ModFiles.ModName(folder)) + ".dll");
+                foreach (var f in rootDlls)
                 {
+                    // This is the result of compiling these sources, not an
+                    // input change. Publishing it must not schedule another build.
+                    if (string.Equals(f, primaryDll, StringComparison.OrdinalIgnoreCase)) continue;
                     var fi = new FileInfo(f);
                     sb += Path.GetFileName(f) + "|" + fi.Length + "|" + fi.LastWriteTimeUtc.Ticks + ";";
                 }

@@ -25,14 +25,17 @@ $coop = Join-Path (Split-Path $built.Archive -Parent) 'JonCoopQoL'
 New-Item -ItemType Directory -Path (Join-Path $OutputPath 'Mods') -Force | Out-Null
 Copy-Item -LiteralPath $manager,$coop -Destination (Join-Path $OutputPath 'Mods') -Recurse
 Copy-Item -LiteralPath $built.Archive,($built.Archive + '.sha256') -Destination $OutputPath
+foreach ($name in @('Install.cmd','Install.ps1','Play.cmd','Play.ps1')) {
+    Copy-Item -LiteralPath (Join-Path $work ('manager\' + $name)) -Destination $OutputPath
+}
 $readme = @'
-READY FOR A MANUAL SWAP AFTER PLAYING - DEVELOPMENT BUILD
+JON'S CO-OP MODS - BETA
 
-Nothing installs itself or changes the running game. After closing 7 Days
-to Die, move old HotReloadTool/JonCoopQoL folders into a sibling Mods-offline
-folder outside active Mods and copy BOTH folders from this download's Mods
-folder into your active Mods folder. Keep the game's 0_TFP_Harmony and one
-copy of each added mod across the user and game Mods locations.
+Extract the whole ZIP, close 7 Days to Die, and double-click Install.cmd.
+It verifies and installs BOTH mods, preserves browser packs/settings and
+backs up overwritten files under Mods-offline. Double-click Play.cmd to
+launch without EAC. Nothing installs itself or updates automatically.
+Keep the game's 0_TFP_Harmony and one active copy of each mod.
 
 The usual user Mods folder is %AppData%\7DaysToDie\Mods. Preserve your old
 HotReloadTool\browser folder in the replacement to retain browser settings,
@@ -58,16 +61,15 @@ are not saved as your own originals. Both updated folders are necessary
 because team sharing uses the new manager bootstrap channel.
 
 See Mods\JonCoopQoL\README.txt for controls and limits. Nine QoL source
-files are included for supported live editing after the initial swap.
+files are included for supported live editing. Successful builds also
+replace the startup DLL, so friends do not need a compiler to play them.
 
 Offline checks cover native routing definitions, saved loot history, ping
 fade/pulse, serialized team snapshots/deletions/ownership, compiler and pack
 behavior. Native UI, ground rendering/input, walking/driving, shared-map
-controls, loot replication and two-player join/download/rejoin remain
-UNVERIFIED while Jon is playing. Building never starts or alters the game.
-
-This combined development bundle is staged locally from beta. It does not
-replace the older public v6.3.0-beta.1 GitHub release.
+controls, loot replication and two-player join/download/rejoin require
+native gameplay verification. See the release notes for observed results.
+Building never starts or alters the game. This remains a beta release.
 '@
 [IO.File]::WriteAllText((Join-Path $OutputPath 'README.txt'),$readme)
 $managerIdentity = Get-Content (Join-Path $manager 'build.json') -Raw | ConvertFrom-Json
@@ -80,8 +82,8 @@ foreach ($file in Get-ChildItem -LiteralPath (Join-Path $OutputPath 'Mods') -Fil
 @{ application='JonCoop-development'; revision=$revision; managerRevision=$managerIdentity.revision;
     gameReferences=$managerIdentity.gameReferences; nativeGameplayVerified=$false; files=$hashes } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $OutputPath 'bundle.json') -Encoding UTF8
-$zip = Join-Path $work 'Jon-Coop-development.zip'
-Compress-Archive -LiteralPath (Join-Path $OutputPath 'Mods'),(Join-Path $OutputPath 'README.txt'),(Join-Path $OutputPath 'bundle.json') -DestinationPath $zip
+$zip = Join-Path $work 'Jon-Coop-beta.zip'
+Compress-Archive -Path (Join-Path $OutputPath '*') -DestinationPath $zip
 $extracted = Join-Path $work 'extracted'
 Expand-Archive -LiteralPath $zip -DestinationPath $extracted
 foreach ($pair in $hashes.GetEnumerator()) {
@@ -95,7 +97,7 @@ foreach ($file in Get-ChildItem -LiteralPath $manager,$coop -File -Recurse) {
 }
 $digest = (Get-FileHash -LiteralPath $zip).Hash
 Copy-Item -LiteralPath $zip -Destination $OutputPath
-($digest.ToLowerInvariant() + '  Jon-Coop-development.zip') | Set-Content -LiteralPath (Join-Path $OutputPath 'Jon-Coop-development.zip.sha256') -Encoding ASCII
+($digest.ToLowerInvariant() + '  Jon-Coop-beta.zip') | Set-Content -LiteralPath (Join-Path $OutputPath 'Jon-Coop-beta.zip.sha256') -Encoding ASCII
 Write-Output ('Ready: ' + $OutputPath)
 Write-Output ('Verified mod files: ' + $hashes.Count)
 Write-Output ('Source revision: ' + $revision)
