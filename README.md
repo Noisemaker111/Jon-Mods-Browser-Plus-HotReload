@@ -44,6 +44,8 @@ The in-game compiler now reports its complete diagnostics, rejects compiler fail
 
 ## Verification and source
 
+The staged development mod [`mods/JonCoopQoL`](mods/JonCoopQoL) adds loot skulls tied to the native respawn clock, party portraits with health/stamina, right-click Follow while inventory is open (walking and ground vehicles), and category sorting/Smart chest routing. One book seeds all native reading types. It preserves individual items and native stack/lock/capacity rules. [Its readme](mods/JonCoopQoL/README.txt) describes the controls and current limits. `scripts/Test-Coop.ps1` builds against the installed game, applies the XML patches, checks the extracted archive and tests production rules and saved loot history. This mod is staged for a manual swap; its native multiplayer/UI behavior remains unverified while Jon plays.
+
 The release has production-source checks for pack save/reload, both Mods locations, exact file matching, protected manager identity, version mismatch, corrupt/interrupted archives, traversal, replacement rollback and queue recovery after failure. Both DLLs compile against the installed game's actual assemblies.
 
 An earlier build in this work loaded in an isolated V3.2 dedicated game and its engine API check reported 19 passes and 0 failures. **The final MODS controls, two-player join/download/restart/rejoin flow and live host changes have not been exercised in the game.** The computer-use service was unavailable, and Jon requested that game testing stop while he plays. This remains a prerelease, not a claim of verified multiplayer compatibility.

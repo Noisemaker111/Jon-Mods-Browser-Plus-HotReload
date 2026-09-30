@@ -18,3 +18,4 @@ if ($LASTEXITCODE -ne 0) { throw 'Compiler check compilation failed' }
 & (Join-Path $work 'CompilerChecks.exe') (Join-Path $work 'compiler checks with spaces') $compiler
 if ($LASTEXITCODE -ne 0) { throw ('Compiler verification failed; evidence: ' + $work) }
 Write-Output ('Evidence: ' + $work)
+& (Join-Path $PSScriptRoot 'Test-Coop.ps1') -GamePath $GamePath
