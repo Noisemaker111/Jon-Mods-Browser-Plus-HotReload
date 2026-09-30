@@ -1,9 +1,12 @@
-Jon's Shared Waypoints — independent beta mod
+Jon's Shared Waypoints (Beta)
 
-Join a native party to share existing saved manual waypoints automatically. Adding or deleting them with normal map controls sends an updated snapshot. Teammate markers appear in the native map/list with the owner's name and can be tracked normally. Their unsaved mirrors are removed on party departure, world cleanup or source reload and are not saved as your own originals. Deleting a shared copy locally does not delete the owner's original. Native automatic vehicle/drone markers are left unchanged. The host authenticates owners and relays only within their party. This mod has its own native network package; it needs no browser, manager, hot reload or website service. Install the same version on the host and both players, then restart.
+Automatically shares your saved map waypoints with party members. Adding or deleting a waypoint updates what your party sees. Shared markers show their owner's name and can be tracked from the map. They disappear when you leave the party and are not saved as your own waypoints. Deleting a shared marker locally does not delete the owner's original. Automatic vehicle and drone markers are unchanged.
 
-Close the game, extract the ZIP and put its single named mod folder in %AppData%\7DaysToDie\Mods. Launch with EAC disabled and keep the game-provided 0_TFP_Harmony. Before using these split mods, move the old JonCoopQoL folder outside every active Mods location to avoid duplicate hooks. Each feature is optional and independent; choose only the ones you want. No installer scripts or base-game libraries are bundled.
+Installation
+Close the game. Extract the ZIP and copy the JonSharedWaypoints folder into %AppData%\7DaysToDie\Mods. Start the game with EAC disabled. For multiplayer, install the same version on the host and every player.
 
-Experimental beta for V3.2.0 (b10). Compiles against that installed game and has archive, native API/XML and production-rule checks. The split build's in-game input/rendering and full two-player networking have not been verified. Do not interpret these checks as a completed multiplayer play test.
+Beta
+Experimental beta for 7 Days to Die V3.2.0 (b10). In-game behavior and multiplayer are unverified.
 
-Original gameplay source by Jon. You may install and play this mod. Re-uploading or including it in a public mod pack requires the author's permission. 7DaysToDieMods.com may host the submitted archive and original cover artwork under its submission terms. No third-party or base-game DLLs/assets are included.
+Permissions
+Re-uploading or including this mod in a public mod pack requires the author's permission.

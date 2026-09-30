@@ -1,9 +1,12 @@
-Jon's Loot Skulls — independent beta mod
+Jon's Loot Skulls (Beta)
 
-Empty a naturally spawned loot container to mark its location or POI with a skull and remaining game hours. The marker follows native nearby-player respawn deferrals. Refilling a container or resetting the POI removes its record. Respawn eligibility does not force an unloaded chunk to repopulate. Disabled respawn keeps the marker. Player-built storage is excluded. A skull records an emptied container, not proof that every container in a building was looted. History is saved per world; legacy JonCoopQoL history is read on first use. Clients only observe loot data the game replicates to them.
+Marks emptied natural loot containers and their locations with a skull and the remaining respawn time. The countdown follows the world's loot respawn settings and nearby-player delays. Refilling a container or resetting its location removes the marker. Player-built storage is excluded. A skull marks an emptied container, not an entire building. Markers are saved separately for each world.
 
-Close the game, extract the ZIP and put its single named mod folder in %AppData%\7DaysToDie\Mods. Launch with EAC disabled and keep the game-provided 0_TFP_Harmony. Before using these split mods, move the old JonCoopQoL folder outside every active Mods location to avoid duplicate hooks. Each feature is optional and independent; choose only the ones you want. No installer scripts or base-game libraries are bundled.
+Installation
+Close the game. Extract the ZIP and copy the JonLootSkulls folder into %AppData%\7DaysToDie\Mods. Start the game with EAC disabled. For multiplayer, install the same version on the host and every player.
 
-Experimental beta for V3.2.0 (b10). Compiles against that installed game and has archive, native API/XML and production-rule checks. The split build's in-game input/rendering and full two-player networking have not been verified. Do not interpret these checks as a completed multiplayer play test.
+Beta
+Experimental beta for 7 Days to Die V3.2.0 (b10). In-game behavior and multiplayer are unverified.
 
-Original gameplay source by Jon. You may install and play this mod. Re-uploading or including it in a public mod pack requires the author's permission. 7DaysToDieMods.com may host the submitted archive and original cover artwork under its submission terms. No third-party or base-game DLLs/assets are included.
+Permissions
+Re-uploading or including this mod in a public mod pack requires the author's permission.

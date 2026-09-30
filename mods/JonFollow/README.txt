@@ -1,9 +1,12 @@
-Jon's Follow — independent beta mod
+Jon's Follow (Beta)
 
-Open inventory with Tab, right-click a party row, choose Follow, then close inventory. Moving manually, jumping, using an item, death, party departure, or a disconnected/out-of-range target cancels Follow. A Stop following button is available with inventory open. Drive your own bicycle, minibike, motorcycle or 4x4 to follow using native steering, acceleration and brakes. It does not enter vehicles for you, support gyrocopter flight, navigate mazes or find alternate routes. It pauses/brakes at detected obstacles and drops. It also works with the native party HUD without the portraits mod.
+Press Tab, right-click a party member and choose Follow, then close your inventory. Follow works on foot and while driving your own bicycle, minibike, motorcycle or 4x4. Manual movement, jumping, using an item, death, leaving the party, or losing the target cancels following. You can also choose Stop following with your inventory open. Vehicles brake at detected obstacles and drops. Follow does not enter vehicles, fly gyrocopters or find alternate routes. Works with the standard party HUD or Jon's Party Portraits.
 
-Close the game, extract the ZIP and put its single named mod folder in %AppData%\7DaysToDie\Mods. Launch with EAC disabled and keep the game-provided 0_TFP_Harmony. Before using these split mods, move the old JonCoopQoL folder outside every active Mods location to avoid duplicate hooks. Each feature is optional and independent; choose only the ones you want. No installer scripts or base-game libraries are bundled.
+Installation
+Close the game. Extract the ZIP and copy the JonFollow folder into %AppData%\7DaysToDie\Mods. Start the game with EAC disabled. For multiplayer, install the same version on the host and every player.
 
-Experimental beta for V3.2.0 (b10). Compiles against that installed game and has archive, native API/XML and production-rule checks. The split build's in-game input/rendering and full two-player networking have not been verified. Do not interpret these checks as a completed multiplayer play test.
+Beta
+Experimental beta for 7 Days to Die V3.2.0 (b10). In-game behavior and multiplayer are unverified.
 
-Original gameplay source by Jon. You may install and play this mod. Re-uploading or including it in a public mod pack requires the author's permission. 7DaysToDieMods.com may host the submitted archive and original cover artwork under its submission terms. No third-party or base-game DLLs/assets are included.
+Permissions
+Re-uploading or including this mod in a public mod pack requires the author's permission.
