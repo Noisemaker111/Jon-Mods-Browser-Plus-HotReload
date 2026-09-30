@@ -31,7 +31,7 @@ namespace HotReloadTool
     /// <summary>Always-loaded half: owns the core file path, the core loader and the 'hr' command.</summary>
     public static class Bootstrap
     {
-        public const string BootstrapVersion = "6.3.0-beta.2";
+        public const string BootstrapVersion = "6.3.0-beta.3";
         const string CORE_FILE = "HotReloadCore.dll";
 
         // every dll we byte-loaded (mods + core): the core adopts this so deliberate

@@ -36,7 +36,7 @@ namespace HotReloadTool
     // be hot-swapped underneath it at any time.
     public static class CoreEntry
     {
-        public const string CoreVersion = "6.3.0-beta.2";
+        public const string CoreVersion = "6.3.0-beta.3";
 
         public static bool Init(Mod mod)
         {
@@ -71,7 +71,7 @@ namespace HotReloadTool
 
     public static class HotReloadCore
     {
-        public const string Version = "6.3.0-beta.2";
+        public const string Version = "6.3.0-beta.3";
         public static Mod HostMod;
         public static string ModDir;
         public static string HotpackDir;

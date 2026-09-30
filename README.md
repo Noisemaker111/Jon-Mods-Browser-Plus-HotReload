@@ -4,9 +4,11 @@ An in-game **MODS** button, mod manager and hot reload tools for 7 Days to Die o
 
 ## Download and install
 
-1. Download **Jon-Coop-beta.zip** from the [GitHub beta release](https://github.com/Noisemaker111/Jon-Mods-Browser-Plus-HotReload/releases/tag/v6.3.0-beta.2) and extract the whole archive. The smaller manager-only ZIP is also available.
-2. Close the game, then double-click **Install.cmd**. The co-op ZIP installs `HotReloadTool` and `JonCoopQoL` in `%AppData%\7DaysToDie\Mods`, verifies the files and preserves your browser data, saved packs and backups. It refuses installation while the game is running.
-3. Double-click **Play.cmd** to open the game without EAC. Click **MODS** in the main menu or pause menu.
+1. Download **JonModsBrowser-Plus-HotReload-beta.zip** from the [GitHub beta release](https://github.com/Noisemaker111/Jon-Mods-Browser-Plus-HotReload/releases/tag/v6.3.0-beta.3). It contains one folder: `HotReloadTool`.
+2. Close the game and put that folder in `%AppData%\7DaysToDie\Mods`. When replacing an older copy, preserve its `browser` folder to keep saved packs, installed-mod records and backups.
+3. Launch the game with EAC disabled. Click **MODS** in the main menu or pause menu.
+
+**JonCoopQoL is a separate, optional gameplay mod.** Its own `JonCoopQoL.zip` contains one `JonCoopQoL` folder to put in Mods. The manager download does not include it. No installer or launcher scripts are needed for either download.
 
 Both friends need this same release, the same game build and EAC disabled for the modded world. This is a code mod; it cannot load in an EAC-protected session.
 
@@ -44,7 +46,7 @@ The in-game compiler reports complete diagnostics, rejects compiler failures eve
 
 ## Verification and source
 
-The included [`JonCoopQoL`](mods/JonCoopQoL) adds loot skulls tied to the native respawn clock, party portraits with health/stamina, right-click Follow while inventory is open (walking and ground vehicles), middle-click pulsing ground pings that fade out after six seconds, automatic party waypoint sharing, and category sorting/Smart chest routing. One representative book, item mod, weapon or ammo type seeds its whole destination category using native groups/tags. Item mods outrank weapon/armor tags, ammunition stays separate from weapons, and individual identities, stacks, locks and capacity remain native. Shared waypoint copies use the native map/list and are excluded from the recipient's save; party/world/source cleanup removes them. Both players and the host need the matching manager and QoL mod. [Its readme](mods/JonCoopQoL/README.txt) describes controls and limits.
+The separate [`JonCoopQoL`](mods/JonCoopQoL) adds loot skulls tied to the native respawn clock, party portraits with health/stamina, right-click Follow while inventory is open (walking and ground vehicles), middle-click pulsing ground pings that fade out after six seconds, automatic party waypoint sharing, and category sorting/Smart chest routing. One representative book, item mod, weapon or ammo type seeds its whole destination category using native groups/tags. Item mods outrank weapon/armor tags, ammunition stays separate from weapons, and individual identities, stacks, locks and capacity remain native. Shared waypoint copies use the native map/list and are excluded from the recipient's save; party/world/source cleanup removes them. Both players and the host need the matching manager and QoL mod. [Its readme](mods/JonCoopQoL/README.txt) describes controls and limits.
 
 The release has production-source checks for pack save/reload, both Mods locations, exact file matching, protected manager identity, version mismatch, corrupt/interrupted archives, traversal, replacement rollback and queue recovery after failure. Both DLLs compile against the installed game's actual assemblies.
 
@@ -52,4 +54,4 @@ Both mods loaded in isolated native V3.2 games; the engine API check reported 19
 
 Source is in `src/`. `scripts/build.ps1` accepts the game and Roslyn compiler paths and creates a ZIP without installing or launching it. `scripts/test.ps1` runs the production archive and install-queue checks in the checkout home's `.scratch` directory. Game assemblies are references only and are not redistributed. `HotReloadTool/build.json` records the source revision, reference assembly digest and release-file checksums.
 
-`scripts/Stage-Coop.ps1` builds both matching mods from committed source into a fresh offline folder, includes the installer, launcher and source/controls, creates a combined ZIP/checksum, extracts it and verifies every mod file. It refuses existing output folders and active Mods destinations. Building never installs, launches or publishes.
+`scripts/Stage-Release.ps1` builds the manager and the optional QoL mod from committed source into separate ZIPs/checksums in a fresh offline folder. Each ZIP contains only its own mod folder. It extracts both downloads and verifies their structure and every mod file. `Stage-Coop.ps1` remains a compatibility alias for this separate-release workflow. It refuses existing output folders and active Mods destinations. Building never installs, launches or publishes.

@@ -32,6 +32,7 @@ Copy-Item -LiteralPath (Join-Path $repo 'ModInfo.xml') -Destination $package -Fo
 Copy-Item -LiteralPath (Join-Path $repo 'Config') -Destination $package -Recurse -Force
 Copy-Item -LiteralPath (Join-Path $repo 'README.md') -Destination (Join-Path $OutputPath 'README.md') -Force
 Copy-Item -LiteralPath (Join-Path $repo 'README.txt') -Destination (Join-Path $OutputPath 'README.txt') -Force
+Copy-Item -LiteralPath (Join-Path $repo 'README.txt') -Destination (Join-Path $package 'README.txt') -Force
 Copy-Item -LiteralPath (Join-Path $repo 'scripts\Install.ps1') -Destination $OutputPath -Force
 Copy-Item -LiteralPath (Join-Path $repo 'Install.cmd') -Destination $OutputPath -Force
 Copy-Item -LiteralPath (Join-Path $repo 'scripts\Play.ps1') -Destination $OutputPath -Force
@@ -42,10 +43,10 @@ foreach ($file in Get-ChildItem -LiteralPath $package -File -Recurse) {
     if ($file.FullName -eq (Join-Path $package 'build.json')) { continue }
     $files[$file.FullName.Substring($package.Length + 1).Replace('\','/')] = (Get-FileHash -LiteralPath $file.FullName).Hash
 }
-$identity = @{ version = '6.3.0-beta.2'; revision = $revision; gameReferences = (Get-FileHash (Join-Path $managed 'Assembly-CSharp.dll')).Hash; builtUtc = [DateTime]::UtcNow.ToString('o'); files = $files }
+$identity = @{ version = '6.3.0-beta.3'; revision = $revision; gameReferences = (Get-FileHash (Join-Path $managed 'Assembly-CSharp.dll')).Hash; builtUtc = [DateTime]::UtcNow.ToString('o'); files = $files }
 $identity | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $package 'build.json') -Encoding UTF8
 $zip = Join-Path (Split-Path $OutputPath -Parent) 'JonModsBrowser-Plus-HotReload-beta.zip'
-Compress-Archive -Path (Join-Path $OutputPath '*') -DestinationPath $zip -Force
+Compress-Archive -LiteralPath $package -DestinationPath $zip -Force
 Get-FileHash -LiteralPath $zip | Format-List
 ((Get-FileHash -LiteralPath $zip).Hash.ToLowerInvariant() + '  ' + (Split-Path $zip -Leaf)) | Set-Content -LiteralPath ($zip + '.sha256') -Encoding ASCII
 Write-Output ('Package: ' + $zip)

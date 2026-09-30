@@ -1,7 +1,7 @@
-Jon's Co-op Quality of Life — development build
+Jon's Co-op Quality of Life — standalone beta mod
 
 Keep this folder offline until the game is closed. Then put the whole
-JonCoopQoL folder next to HotReloadTool in your active Mods folder. Move
+JonCoopQoL folder in your active Mods folder. This is a separate mod; it is not included in the manager download. Move
 old versions into a sibling Mods-offline folder outside every active Mods
 location. Keep one copy of each mod across the user and game Mods folders.
 Both players need the same game build and EAC disabled for these code mods.
