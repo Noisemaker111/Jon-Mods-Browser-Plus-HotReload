@@ -159,7 +159,9 @@ namespace JonCoopQoL
         public void ClearPoi(int id) { Loot.ClearPoi(id); SaveLoot(); }
         public void ObserveLoot(ITileEntityLootable container)
         {
-            if (container == null || GameManager.Instance?.World == null) return;
+            // A queued chunk-read callback can outlive a source hot reload.
+            // The retired runtime must never overwrite the replacement's ledger.
+            if (Instance != this || container == null || GameManager.Instance?.World == null) return;
             // Chunk reads also occur on workers. Unity and ledger mutation stay
             // on the main thread, scheduled by that concrete replication event.
             if (!ThreadManager.IsMainThread())
@@ -167,7 +169,7 @@ namespace JonCoopQoL
                 var observedWorld = GameManager.Instance.World;
                 ThreadManager.AddSingleTaskMainThread("Jon loot replicated", () =>
                 {
-                    if (GameManager.Instance?.World == observedWorld) ObserveLoot(container);
+                    if (Instance == this && GameManager.Instance?.World == observedWorld) ObserveLoot(container);
                 });
                 return;
             }
