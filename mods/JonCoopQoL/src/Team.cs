@@ -119,7 +119,7 @@ namespace JonCoopQoL
             if (owner?.Party == null) return;
             foreach (var member in owner.Party.MemberList)
             {
-                if (member.entityId == owner.entityId) continue;
+                if (member.entityId == owner.entityId || !SameParty(owner, member)) continue;
                 var client = ConnectionManager.Instance.Clients.ForEntityId(member.entityId);
                 if (client != null && client.loginDone && !client.disconnecting) Send(m, client);
             }
@@ -137,7 +137,7 @@ namespace JonCoopQoL
             if (send == null || owner?.Party == null || !snapshots.Completed.TryGetValue(owner.entityId, out var points)) return;
             foreach (var member in owner.Party.MemberList)
             {
-                if (member.entityId == owner.entityId) continue;
+                if (member.entityId == owner.entityId || !SameParty(owner, member)) continue;
                 var client = ConnectionManager.Instance.Clients.ForEntityId(member.entityId);
                 if (client != null && client.loginDone && !client.disconnecting) SendSnapshot(owner.entityId, points, client);
             }
