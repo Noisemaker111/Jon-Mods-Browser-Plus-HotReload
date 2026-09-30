@@ -21,7 +21,7 @@ namespace JonCoopQoL
             new Harmony("JonCoopQoL").PatchAll(typeof(ModApi).Assembly);
             if (GameManager.Instance?.World?.GetPrimaryPlayer() != null) CoopRuntime.Instance.OpenWorld();
             CoopRuntime.Instance.BindExistingParty();
-            Log.Out("[JonCoopQoL] Loot skulls, party portraits, follow, category sorting and stashing loaded.");
+            Log.Out("[JonCoopQoL] Loot skulls, party portraits, follow, category routing, ground pings and team waypoints loaded.");
         }
     }
 
@@ -30,6 +30,8 @@ namespace JonCoopQoL
         public static CoopRuntime Instance;
         public readonly FollowState Follow = new FollowState();
         public readonly LootLedger Loot = new LootLedger();
+        public GroundPings Pings;
+        public TeamService Team;
         readonly Dictionary<XUiC_PartyEntry, Portrait> portraits = new Dictionary<XUiC_PartyEntry, Portrait>();
         readonly Dictionary<XUiController, XUiEvent_OnPressEventHandler> handlers = new Dictionary<XUiController, XUiEvent_OnPressEventHandler>();
         string saveFile, worldGuid;
@@ -44,9 +46,10 @@ namespace JonCoopQoL
             public XUiV_Texture View;
             public void Dispose() { if (View != null) View.Texture = null; Render?.Cleanup(); }
         }
-        void Awake() { Instance = this; skull = MakeSkull(); }
+        void Awake() { Instance = this; skull = MakeSkull(); Pings = new GroundPings(); Team = new TeamService(this); }
         void OnDestroy()
         {
+            Team?.Dispose(); Pings?.Dispose();
             foreach (var pair in handlers) pair.Key.OnRightPress -= pair.Value;
             handlers.Clear();
             foreach (var portrait in portraits.Values) portrait.Dispose();
@@ -143,9 +146,11 @@ namespace JonCoopQoL
             saveFile = Path.Combine(ConnectionManager.Instance.IsClient ? GameIO.GetSaveGameLocalDir() : GameIO.GetSaveGameDir(), "JonCoopQoL", "loot-skulls.xml");
             try { Loot.Load(saveFile); }
             catch (Exception error) { Loot.Records.Clear(); Log.Warning("[JonCoopQoL] Loot history: " + error.Message); }
+            Team?.OpenWorld();
         }
         public void CloseWorld()
         {
+            Team?.CloseWorld();
             Follow.Stop(null); menuTarget = null; Loot.Records.Clear(); saveFile = worldGuid = null;
             foreach (var portrait in portraits.Values) portrait.Dispose();
             portraits.Clear();
@@ -196,6 +201,7 @@ namespace JonCoopQoL
         {
             var player = GameManager.Instance?.World?.GetPrimaryPlayer();
             if (player == null || player.IsDead()) return;
+            Pings.HandleInput(player, Team);
             if (Event.current.type == EventType.Repaint && player.playerCamera != null)
             {
                 int now = GameUtils.WorldTimeToTotalHours(GameManager.Instance.World.GetWorldTime());
@@ -231,6 +237,7 @@ namespace JonCoopQoL
             { Follow.Start(menuTarget); menuTarget = null; }
             else if (GUI.Button(new Rect(menuBounds.x+8,menuBounds.y+61,214,28),"Cancel")) menuTarget = null;
         }
+        void OnRenderObject() { Pings?.Render(GameManager.Instance?.World?.GetPrimaryPlayer()); }
         static Texture2D MakeSkull()
         {
             var texture = new Texture2D(64,64,TextureFormat.RGBA32,false);

@@ -5,6 +5,7 @@ using System.Linq;
 using System.Xml;
 using Mono.Cecil;
 using JonCoopQoL;
+using HotReloadTool;
 
 static class CoopChecks
 {
@@ -42,6 +43,8 @@ static class CoopChecks
         {
             var xml = new XmlDocument { XmlResolver = null }; xml.Load(args[0]);
             foreach(XmlElement item in xml.SelectNodes("/items/item")) items.Add(item.GetAttribute("name"),item);
+            var modifiers = new XmlDocument { XmlResolver = null }; modifiers.Load(Path.Combine(Path.GetDirectoryName(args[0]),"item_modifiers.xml"));
+            foreach(XmlElement item in modifiers.SelectNodes("/item_modifiers/item_modifier")) items.Add(item.GetAttribute("name"),item);
             var reading = items.Keys.Where(Reading).ToArray();
             Check(reading.Any(x => x.EndsWith("SkillMagazine")) && reading.Any(x => x.EndsWith("Schematic")) && reading.Any(x => x.StartsWith("book")),"native reading set covers magazines, perk books and schematics");
             var seed = reading.First(x => x.StartsWith("book"));
@@ -55,6 +58,17 @@ static class CoopChecks
             Check(corn != null && Rules.Category(corn.GetAttribute("name"),null,x=>false,true) != Category("resourceWood") && Rules.Category(corn.GetAttribute("name"),null,x=>false,true) != Rules.Category("woodShapes",null,x=>false,true),"native seed blocks route separately from building blocks and resources");
             Check(Category("medicalFirstAidBandage") == Category("medicalFirstAidKit"),"medicine seed routes other medicine");
             Check(Category("foodCanChili") == Category("drinkJarBoiledWater"),"food and drink share a destination category");
+            var mods = items.Keys.Where(x => !Reading(x) && Split(Property(x,"Group")).Contains("Mods")).ToArray();
+            Check(mods.Length > 50 && mods.All(x => Category(x) == "08 Item mods"),"one attachment routes all " + mods.Length + " native item-mod definitions, including inherited groups");
+            Check(Rules.Category("customAttachment",new[]{"Mods","Ranged Weapons"},x=>x=="weapon",false)=="08 Item mods" && Rules.Category("modGunBarrelExtenderSchematic",null,x=>false,false)=="01 Books","item mods outrank weapon tags; their schematics stay in books");
+            var ammo = items.Keys.Where(x => !Reading(x) && Split(Property(x,"Group")).Contains("Ammo")).ToArray();
+            Check(ammo.Length > 20 && ammo.All(x => Category(x)=="04 Ammunition"),"one ammunition seed routes all " + ammo.Length + " native ammo definitions separately from weapons");
+            var tools = items.Keys.Where(x => !Reading(x) && Split(Property(x,"Group")).Contains("Tools/Traps") && !Split(Property(x,"Group")).Contains("Mods")).ToArray();
+            Check(tools.Length > 10 && tools.All(x=>Category(x)=="05 Tools"),"native Tools/Traps groups route all " + tools.Length + " equipment definitions, including weapon-tagged tools" + (tools.Any(x=>Category(x)!="05 Tools") ? "; mismatches: " + string.Join(", ",tools.Where(x=>Category(x)!="05 Tools").Select(x=>x+"="+Category(x))) : ""));
+            var weapons = items.Keys.Where(x => !Reading(x) && !mods.Contains(x) && !ammo.Contains(x) && !tools.Contains(x) && Split(Property(x,"Group")).Any(g=>g=="Ranged Weapons"||g=="Melee Weapons")).ToArray();
+            Check(weapons.Length > 20 && weapons.All(x=>Category(x)=="06 Weapons"),"one weapon seed routes all " + weapons.Length + " native weapon definitions");
+            Check(new[]{Category("modGunBarrelExtender"),Category("ammo9mmBulletBall"),Category("gunHandgunT1Pistol"),Category("meleeToolRepairT0StoneAxe"),Category("armorLumberjackBoots"),Category("resourceWood"),Category("vehicleBicycleChassis")}.Distinct().Count()==7,"mods, ammo, weapons, tools, armor, resources and vehicle parts remain separate destinations");
+            CheckTeamProtocol();
 
             Check(!Rules.RespawnDue(100,819,30) && Rules.RespawnDue(100,820,30),"skull expiry matches native whole-hour / day eligibility");
             Check(!Rules.RespawnDue(100,20000,0) && !Rules.RespawnDue(100,99,30),"disabled respawn and reversed clock keep markers");
@@ -82,6 +96,40 @@ static class CoopChecks
             return 0;
         }
         catch(Exception error) { Console.Error.WriteLine(error); return 1; }
+    }
+    static TeamMessage Wire(TeamMessage m) { return TeamProtocol.Decode(TeamEnvelope.Unwrap(TeamEnvelope.Wrap(TeamProtocol.Encode(m)))); }
+    static TeamMessage Frame(TeamKind kind, int owner=7, string batch="a", int count=1)
+    { return new TeamMessage { Kind=kind,World="world-a",Owner=owner,Batch=batch,Count=count,Waypoint=new TeamWaypoint { X=-44,Y=71,Z=950,Name="Home 🏠",Icon="ui_game_symbol_house" } }; }
+    static void CheckTeamProtocol()
+    {
+        var point = Wire(Frame(TeamKind.Waypoint));
+        Check(point.Owner==7 && point.Waypoint.X==-44 && point.Waypoint.Name=="Home 🏠" && point.Waypoint.Icon=="ui_game_symbol_house","native team envelope round-trips waypoint coordinates, Unicode names and icons");
+        Check(!TeamEnvelope.IsTeam(System.Text.Encoding.UTF8.GetBytes("{\"kind\":\"hello\"}")) && TeamEnvelope.Unwrap(new byte[]{74,67,80})==null && TeamEnvelope.Unwrap(new byte[]{74,67,80,2})==null,"manager JSON traffic stays separate; truncated and unknown team versions are rejected");
+        Check(TeamEnvelope.Wrap(new byte[65532]).Length==65536,"team payload fits the native packet boundary exactly");
+        bool rejected=false; try { TeamEnvelope.Wrap(new byte[65533]); } catch(InvalidDataException) { rejected=true; }
+        Check(rejected,"oversize team payload cannot exceed native receive capacity");
+        rejected=false; try { TeamProtocol.Decode(TeamProtocol.Encode(Frame(TeamKind.End)).Concat(new byte[]{0}).ToArray()); } catch(InvalidDataException) { rejected=true; }
+        Check(rejected,"extra bytes cannot change the interpretation of a team operation");
+        var a = new TeamSnapshots();
+        a.Accept(Wire(Frame(TeamKind.Begin))); a.Accept(point);
+        Check(!a.Completed.ContainsKey(7) && a.Accept(Wire(Frame(TeamKind.End))) && a.Completed[7].Single().Name=="Home 🏠","waypoints become visible only after an entire serialized snapshot arrives");
+        a.Accept(Wire(Frame(TeamKind.Begin,7,"incomplete",2))); a.Accept(Wire(Frame(TeamKind.Waypoint,7,"incomplete")));
+        Check(!a.Accept(Wire(Frame(TeamKind.End,7,"incomplete"))) && a.Completed[7].Count==1,"an incomplete snapshot preserves the previous waypoint set");
+        a.Accept(Wire(Frame(TeamKind.Begin,7,"old"))); a.Accept(Wire(Frame(TeamKind.Begin,7,"new")));
+        a.Accept(Wire(Frame(TeamKind.Waypoint,7,"old"))); a.Accept(Wire(Frame(TeamKind.Waypoint,7,"new")));
+        a.Accept(Wire(Frame(TeamKind.Begin,8,"other"))); a.Accept(Wire(Frame(TeamKind.Waypoint,8,"other")));
+        Check(a.Accept(Wire(Frame(TeamKind.End,8,"other"))) && a.Accept(Wire(Frame(TeamKind.End,7,"new"))) && a.Completed.Count==2,"superseded batches and interleaved teammates cannot corrupt each other's snapshots");
+        a.Accept(Wire(Frame(TeamKind.Begin,7,"deleted",0)));
+        Check(a.Accept(Wire(Frame(TeamKind.End,7,"deleted",0))) && a.Completed[7].Count==0 && a.Completed[8].Count==1,"deleting every waypoint synchronizes an empty snapshot without deleting another teammate's markers");
+        a.Remove(8); a.Clear(); Check(a.Completed.Count==0,"party departure and world cleanup discard cached team waypoints");
+        Check(TeamProtocol.Authorized("world-a","world-a",7,7,true,true) && !TeamProtocol.Authorized("world-a","world-b",7,7,true,true) && !TeamProtocol.Authorized("world-a","world-a",8,7,true,true) && !TeamProtocol.Authorized("world-a","world-a",7,7,false,true) && !TeamProtocol.Authorized("world-a","world-a",7,7,true,false),"host rejects foreign worlds, impersonated owners, unlogged clients and players outside a party");
+        var ping = Frame(TeamKind.Ping); ping.X=10.5f; ping.Y=60; ping.Z=-42; ping.NY=1; ping.Heading=33;
+        var decoded = Wire(ping);
+        Check(decoded.X==10.5f && decoded.NY==1 && decoded.Heading==33,"team pings preserve world-space ground position, normal and heading");
+        ping.X=float.NaN; rejected=false; try { Wire(ping); } catch(InvalidDataException) { rejected=true; }
+        Check(rejected,"invalid ping coordinates are rejected before rendering or relay");
+        Check(TeamProtocol.PingAlpha(0)==1 && TeamProtocol.PingAlpha(4)==1 && TeamProtocol.PingAlpha(5)==0.5f && TeamProtocol.PingAlpha(6)==0 && TeamProtocol.PingAlpha(20)==0,"ground arrows fade over the last two seconds and expire at six seconds");
+        Check(TeamProtocol.PingScale(0.15f)!=TeamProtocol.PingScale(0.5f),"ground arrow geometry changes scale during its pulse");
     }
     static void CheckNativePatches(string gameDll, string modDll)
     {
@@ -115,6 +163,8 @@ static class CoopChecks
             var stash = game.MainModule.Types.Single(x=>x.Name == "XUiM_LootContainer").Methods.Single(x=>x.Name == "StashItems");
             var calls = stash.Body.Instructions.Select(x=>x.Operand as MethodReference).Where(x=>x!=null).ToArray();
             Check(calls.Count(x=>x.DeclaringType.Name == "IInventory" && x.Name == "HasItem") == 1 && calls.Any(x=>x.Name == "IsIgnoredSlot") && calls.Any(x=>x.Name == "TryStackItem") && calls.Any(x=>x.Name == "AddItem"),"native stash has the single routing decision and retains locks, stacking and capacity controls");
+            var waypointSave = game.MainModule.Types.Single(x=>x.Name=="WaypointCollection").Methods.Single(x=>x.Name=="Write");
+            Check(waypointSave.Body.Instructions.Any(x=>(x.Operand as FieldReference)?.Name=="IsSaved"),"native waypoint save filters unsaved team mirrors from the player's persistent waypoint file");
         }
     }
 }

@@ -10,6 +10,7 @@ namespace JonCoopQoL
         public static string Of(ItemClass item)
         {
             if (item == null) return "zzzzz";
+            if (item is ItemClassModifier) return "08 Item mods";
             return Rules.Category(item.Name, item.Groups,
                 tag => item.HasAnyTags(FastTags<TagGroup.Global>.Parse(tag)), item.IsBlock());
         }

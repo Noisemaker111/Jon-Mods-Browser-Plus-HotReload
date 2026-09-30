@@ -13,18 +13,19 @@ namespace JonCoopQoL
             if (tag("books") || tag("schematics") || tag("craftingSkillMagazine") || tag("csm") ||
                 InGroup(groups, "Books") || InGroup(groups, "BooksOnly") || InGroup(groups, "TCReading") ||
                 name.StartsWith("book") || name.StartsWith("skillmagazine") || name.EndsWith("skillmagazine") || name.EndsWith("schematic")) return "01 Books";
+            // Attachments inherit weapon/armor tags. Their own group wins.
+            if (InGroup(groups, "Mods") || tag("itemModifier") || tag("modification") || name.StartsWith("mod")) return "08 Item mods";
             // Planting seeds are block items in the native game.
             if (name.StartsWith("planted") || tag("seed") || name.StartsWith("seed")) return "11 Farming";
             if (block) return "12 Building";
-            if (tag("medical") || tag("medicine") || name.StartsWith("medical") || name.StartsWith("drug")) return "02 Medicine";
-            if (tag("food") || tag("drink") || name.StartsWith("food") || name.StartsWith("drink")) return "03 Food and drink";
-            if (tag("ammo") || tag("ammunition") || name.StartsWith("ammo")) return "04 Ammunition";
-            if (tag("tool")) return "05 Tools";
-            if (tag("weapon") || name.StartsWith("gun") || name.StartsWith("melee")) return "06 Weapons";
-            if (tag("armor") || tag("clothing") || name.StartsWith("armor") || name.StartsWith("apparel")) return "07 Armor and clothing";
-            if (name.StartsWith("mod")) return "08 Item mods";
-            if (name.StartsWith("vehicle") || name.StartsWith("resourcegas")) return "09 Vehicles and fuel";
-            if (name.StartsWith("resource")) return "10 Resources";
+            if (InGroup(groups,"Medical") || tag("medical") || tag("medicine") || name.StartsWith("medical") || name.StartsWith("drug")) return "02 Medicine";
+            if (InGroup(groups,"Ammo") || InGroup(groups,"Ammunition") || tag("ammo") || tag("ammunition") || name.StartsWith("ammo")) return "04 Ammunition";
+            if (InGroup(groups,"Tools/Traps") || InGroup(groups,"Tools") || tag("tool") || tag("tools")) return "05 Tools";
+            if (InGroup(groups,"Food/Cooking") || tag("foods") || tag("drinks") || tag("food") || tag("drink") || name.StartsWith("food") || name.StartsWith("drink")) return "03 Food and drink";
+            if (InGroup(groups,"Ranged Weapons") || InGroup(groups,"Melee Weapons") || tag("weapon") || name.StartsWith("gun") || name.StartsWith("melee")) return "06 Weapons";
+            if (InGroup(groups,"Armor") || InGroup(groups,"Clothing") || tag("armor") || tag("clothing") || name.StartsWith("armor") || name.StartsWith("apparel")) return "07 Armor and clothing";
+            if (InGroup(groups,"Vehicles") || name.StartsWith("vehicle") || name.StartsWith("resourcegas")) return "09 Vehicles and fuel";
+            if (InGroup(groups,"Resources") || name.StartsWith("resource")) return "10 Resources";
             // Unknown items retain their own group; one arbitrary item must not
             // turn a chest into a catch-all destination.
             return "90 " + (groups != null && groups.Length != 0 ? groups[0] : name);

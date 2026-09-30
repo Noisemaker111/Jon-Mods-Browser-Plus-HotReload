@@ -23,7 +23,7 @@ $refs = @('mscorlib','netstandard','System','System.Core','System.Net.Http','Sys
 $options = @('-noconfig','-nologo','-target:library','-platform:x64','-langversion:latest','-deterministic+')
 foreach ($ref in $refs) { $options += '-r:' + (Join-Path $managed ($ref + '.dll')) }
 $options += '-r:' + (Join-Path $GamePath 'Mods\0_TFP_Harmony\0Harmony.dll')
-& $Compiler @options ('-out:' + (Join-Path $package 'HotReloadTool.dll')) (Join-Path $repo 'src\Bootstrap.cs') (Join-Path $repo 'src\SyncPacket.cs')
+& $Compiler @options ('-out:' + (Join-Path $package 'HotReloadTool.dll')) (Join-Path $repo 'src\Bootstrap.cs') (Join-Path $repo 'src\SyncPacket.cs') (Join-Path $repo 'src\TeamEnvelope.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Bootstrap compilation failed' }
 $core = @('HotReload','ModBrowserCore','ModBrowserUi','ModPack','ModFiles','FriendSync','InstallQueue','ModCompiler') | ForEach-Object { Join-Path $repo ('src\' + $_ + '.cs') }
 & $Compiler @options ('-r:' + (Join-Path $package 'HotReloadTool.dll')) ('-out:' + (Join-Path $package 'core\HotReloadCore.dll')) @core

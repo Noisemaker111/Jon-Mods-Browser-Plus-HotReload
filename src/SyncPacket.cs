@@ -28,6 +28,12 @@ namespace HotReloadTool
         public override int GetLength() { return payload.Length + 6; }
         public override void ProcessPackage(World world, GameManager manager)
         {
+            if (TeamEnvelope.IsTeam(payload))
+            {
+                var team = TeamEnvelope.Unwrap(payload);
+                if (team != null) JonSyncTransport.TeamReceive?.Invoke(team, Sender);
+                return;
+            }
             var handler = JonSyncTransport.Receive;
             if (handler != null) handler(payload, Sender);
         }
@@ -36,6 +42,7 @@ namespace HotReloadTool
     public static class JonSyncTransport
     {
         public static Action<byte[], ClientInfo> Receive;
+        public static Action<byte[], ClientInfo> TeamReceive;
         public static Action Connected;
         public static Func<Action, bool> BeforeWorldJoin;
         public static Action Disconnected;
@@ -87,5 +94,6 @@ namespace HotReloadTool
             if (client != null) client.SendPackage(packet);
             else ConnectionManager.Instance.SendToServer(packet, false);
         }
+        public static void SendTeam(byte[] bytes, ClientInfo client) { Send(TeamEnvelope.Wrap(bytes), client); }
     }
 }
