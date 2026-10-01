@@ -45,6 +45,21 @@ python lab.py look A 40 0       # move the camera
 python lab.py tel "help"        # any console command
 ```
 
+On top of the lab, `tools/engine.py` turns the live engine into pass/fail checks:
+
+```
+python tools/engine.py check                 # server-up, mods, logs, poi, pathtest, navigation, ui
+python tools/engine.py check navigation ui   # only named checks
+python tools/engine.py assert mods JonFollow
+python tools/engine.py assert log server "Follower .* arrived"
+python tools/engine.py assert log server "NullReference" --forbid
+python tools/engine.py config-export         # the config the engine actually applied
+```
+
+It is read-only against a running lab (never starts/stops/reconfigures it), allow-lists
+known dev-launch noise, skips client-dependent checks gracefully when no client is
+connected, and exits non-zero on any real failure.
+
 The console is the automation surface and covers the engine-bound systems:
 
 - **Navigation**: `pathTest` modes (breakblocks/climbladders/climbwalls); watch a
@@ -68,3 +83,7 @@ a file, or the telnet console.
   statically (tier 2) and by calling their bodies directly (tier 1), not by live detour.
 - Keep every engine run isolated (`-UserDataFolder=...`, private `Mods`): never point it at
   Jon's `%AppData%\7DaysToDie`. The lab already does this.
+- `HotReloadTool`'s friend-sync reinstalls mods and restarts clients in a multi-client lab;
+  when a client drops mid-check, client-dependent checks (navigation, ui) skip rather than
+  fail, so engine runs stay meaningful without a stable client. Disable the manager's sync
+  for a fully deterministic engine run.
