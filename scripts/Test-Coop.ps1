@@ -29,24 +29,26 @@ foreach ($build in $built) {
 & (Join-Path $work 'CoopChecks.exe') (Join-Path $GamePath 'Data/Config/items.xml') $work (Join-Path $GamePath '7DaysToDie_Data/Managed/Assembly-CSharp.dll') @dlls
 if ($LASTEXITCODE -ne 0) { throw ('Gameplay verification failed; evidence: ' + $work) }
 Write-Output ('Six independent archives and source/config bytes verified. Evidence: ' + $work)
-# The two optional party mods must compose in either XML application order.
-foreach ($order in @(@('JonFollow','JonPartyPortraits'),@('JonPartyPortraits','JonFollow'))) {
-    $base = New-Object Xml.XmlDocument
-    $base.Load((Join-Path $GamePath 'Data/Config/XUi_InGame/templates.xml'))
-    foreach ($name in $order) {
-        $patch = New-Object Xml.XmlDocument
-        $patch.Load((Join-Path $repo ('mods/' + $name + '/Config/XUi_InGame/templates.xml')))
-        foreach ($operation in $patch.DocumentElement.ChildNodes) {
-            if ($operation.NodeType -ne [Xml.XmlNodeType]::Element) { continue }
-            foreach ($target in @($base.SelectNodes($operation.GetAttribute('xpath')))) {
-                switch ($operation.Name) {
-                    'set' { $target.InnerText = $operation.InnerText }
-                    'remove' { $target.ParentNode.RemoveChild($target) | Out-Null }
-                    'append' { foreach ($node in $operation.ChildNodes) { $target.AppendChild($base.ImportNode($node,$true)) | Out-Null } }
-                }
-            }
+# Follow hit-tests party entries itself, so it ships no HUD XML and works with
+# the vanilla party list or Portraits. Portraits' entry must apply to the game.
+if (Test-Path -LiteralPath (Join-Path $repo 'mods/JonFollow/Config')) { throw 'Follow must not patch the party HUD' }
+$base = New-Object Xml.XmlDocument
+$base.Load((Join-Path $GamePath 'Data/Config/XUi_InGame/templates.xml'))
+$patch = New-Object Xml.XmlDocument
+$patch.Load((Join-Path $repo 'mods/JonPartyPortraits/Config/XUi_InGame/templates.xml'))
+foreach ($operation in $patch.DocumentElement.ChildNodes) {
+    if ($operation.NodeType -ne [Xml.XmlNodeType]::Element) { continue }
+    $targets = @($base.SelectNodes($operation.GetAttribute('xpath')))
+    if (!$targets.Count) { throw ('Portraits XPath matches nothing: ' + $operation.GetAttribute('xpath')) }
+    foreach ($target in $targets) {
+        switch ($operation.Name) {
+            'set' { $target.InnerText = $operation.InnerText }
+            'remove' { if ($target -is [Xml.XmlAttribute]) { $target.OwnerElement.RemoveAttributeNode($target) | Out-Null } else { $target.ParentNode.RemoveChild($target) | Out-Null } }
+            'append' { foreach ($node in $operation.ChildNodes) { $target.AppendChild($base.ImportNode($node,$true)) | Out-Null } }
         }
     }
-    if ($base.SelectNodes('/templates/party_entry/rect/button[@name="jonFollowTarget"]').Count -ne 1 -or $base.SelectNodes('/templates/party_entry/rect/texture[@name="jonPortrait"]').Count -ne 1) { throw 'Follow and Portraits do not compose in both XML orders' }
 }
-Write-Output 'PASS independent Follow and Portraits compose in either native XML order'
+foreach ($name in 'jonPortrait','jonLevel','jonXp','jonXpDeficit','distance','arrowContent') {
+    if ($base.SelectNodes('/templates/party_entry/rect/*[@name="' + $name + '"]').Count -ne 1) { throw ('Portraits party entry lacks ' + $name) }
+}
+Write-Output 'PASS Portraits party entry applies with portrait, level, XP, penalty and distance; Follow needs no HUD patch'

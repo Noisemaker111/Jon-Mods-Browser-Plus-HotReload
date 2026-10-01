@@ -145,6 +145,8 @@ static class CoopChecks
             foreach(var type in mod.MainModule.Types)
                 foreach(var patch in type.CustomAttributes.Where(x=>x.AttributeType.FullName == "HarmonyLib.HarmonyPatch"))
                 {
+                    // Patches listing their targets in TargetMethods() are resolved by Harmony at load.
+                    if(patch.ConstructorArguments.Count < 2) continue;
                     string targetType = ((TypeReference)patch.ConstructorArguments[0].Value).FullName;
                     string targetMethod = (string)patch.ConstructorArguments[1].Value;
                     var native = game.MainModule.Types.Single(x=>x.FullName == targetType);
