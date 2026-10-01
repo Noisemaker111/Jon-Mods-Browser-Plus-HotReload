@@ -1,23 +1,27 @@
 <configs>
-  <remove xpath="/templates/party_entry/rect/*[not(@name='jonFollowTarget')]"/>
+  <remove xpath="/templates/party_entry/rect/*"/>
   <set xpath="/templates/party_entry/rect/@width">310</set>
   <set xpath="/templates/party_entry/rect/@height">76</set>
   <append xpath="/templates/party_entry/rect">
     <sprite name="background" depth="1" width="310" height="76" color="17,19,24,225" type="sliced"/>
     <sprite name="border" depth="2" width="310" height="76" color="142,123,85,255" type="sliced" fillcenter="false"/>
-    <texture name="jonPortrait" depth="3" pos="5,-5" width="64" height="64"/>
-    <label name="TextContent" depth="6" pos="77,-5" width="164" height="23" font_size="20" text="{name}"/>
-    <sprite name="healthBack" depth="3" pos="77,-30" width="225" height="17" color="35,16,19,255" type="sliced"/>
-    <sprite name="BarHealthModifiedMax" depth="4" pos="77,-30" width="225" height="17" color="66,66,66,255" type="filled" fill="{healthmodifiedmax}"/>
-    <sprite name="BarHealth" depth="5" pos="77,-30" width="225" height="17" color="184,48,55,255" type="filled" fill="{healthfill}"/>
-    <label name="healthText" depth="7" pos="77,-30" width="225" height="17" font_size="15" justify="center" text="{healthcurrentwithmax}"/>
-    <sprite name="staminaBack" depth="3" pos="77,-51" width="225" height="13" color="15,24,38,255" type="sliced"/>
-    <sprite name="BarStaminaModifiedMax" depth="4" pos="77,-51" width="225" height="13" color="66,66,66,255" type="filled" fill="{staminamodifiedmax}"/>
-    <sprite name="BarStamina" depth="5" pos="77,-51" width="225" height="13" color="43,117,195,255" type="filled" fill="{staminafill}"/>
-    <sprite name="arrowContent" depth="8" pos="280,-16" style="icon22px" sprite="ui_game_symbol_map_player_arrow" visible="{showarrow}" pivot="center" color="{arrowcolor}"/>
-    <sprite name="icon1" depth="8" pos="248,-4" style="icon22px" sprite="{icon1}" visible="{showicon1}"/>
-    <sprite name="icon2" depth="8" pos="223,-4" style="icon22px" sprite="{icon2}" visible="{showicon2}"/>
-    <label name="distance" depth="6" pos="5,-68" width="64" height="16" font_size="13" text="{distance}"/>
-    <sprite name="voiceStatus" depth="8" pos="58,-58" style="icon22px" sprite="ui_game_symbol_talk" visible="{voicevisible}" pivot="center"/>
+    <texture name="jonPortrait" depth="3" pos="4,-4" width="68" height="68"/>
+    <label name="TextContent" depth="6" pos="80,-3" width="112" height="22" font_size="20" text="{name}"/>
+    <label name="jonLevel" depth="6" pos="192,-5" width="64" height="20" font_size="15" justify="left" text="{jonlevel}"/>
+    <sprite name="healthBack" depth="3" pos="80,-27" width="152" height="16" color="35,16,19,255" type="sliced"/>
+    <sprite name="BarHealthModifiedMax" depth="4" pos="80,-27" width="152" height="16" color="66,66,66,255" type="filled" fill="{healthmodifiedmax}"/>
+    <sprite name="BarHealth" depth="5" pos="80,-27" width="152" height="16" color="184,48,55,255" type="filled" fill="{healthfill}"/>
+    <label name="healthText" depth="7" pos="80,-27" width="152" height="16" font_size="14" justify="center" text="{healthcurrentwithmax}"/>
+    <sprite name="staminaBack" depth="3" pos="80,-46" width="152" height="10" color="15,24,38,255" type="sliced"/>
+    <sprite name="BarStaminaModifiedMax" depth="4" pos="80,-46" width="152" height="10" color="66,66,66,255" type="filled" fill="{staminamodifiedmax}"/>
+    <sprite name="BarStamina" depth="5" pos="80,-46" width="152" height="10" color="43,117,195,255" type="filled" fill="{staminafill}"/>
+    <sprite name="xpBack" depth="3" pos="80,-60" width="226" height="8" color="28,22,36,255" type="sliced"/>
+    <sprite name="jonXpDeficit" depth="4" pos="80,-60" width="226" height="8" color="222,20,20,255" type="filled" fill="{jondeficitfill}"/>
+    <sprite name="jonXp" depth="5" pos="80,-60" width="226" height="8" color="156,92,214,255" type="filled" fill="{jonxpfill}"/>
+    <label name="distance" depth="6" pos="236,-30" width="44" height="18" font_size="15" justify="right" text="{distance}"/>
+    <sprite name="arrowContent" depth="8" pos="294,-38" style="icon22px" sprite="ui_game_symbol_map_player_arrow" visible="{showarrow}" pivot="center" color="{arrowcolor}"/>
+    <sprite name="icon1" depth="8" pos="284,-3" style="icon22px" sprite="{icon1}" visible="{showicon1}"/>
+    <sprite name="icon2" depth="8" pos="260,-3" style="icon22px" sprite="{icon2}" visible="{showicon2}"/>
+    <sprite name="voiceStatus" depth="8" pos="62,-62" style="icon22px" sprite="ui_game_symbol_talk" visible="{voicevisible}" pivot="center"/>
   </append>
 </configs>

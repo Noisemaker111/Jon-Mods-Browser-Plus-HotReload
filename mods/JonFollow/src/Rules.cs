@@ -66,9 +66,22 @@ namespace JonFollow
             return result;
         }
 
-        public static bool CancelFollow(bool manualInput, bool dead, bool targetDead, bool partyMember, float distance)
+        // Follow is a short tether: it starts close and ends when the leader
+        // pulls away (a bike cannot hang on to a car), the follower acts,
+        // dies or leaves the party. A downed friend nearby is waited for.
+        public const float StartRange = 20f, TetherRange = 45f;
+        public static bool CancelFollow(bool manualInput, bool dead, bool partyMember, float gap)
         {
-            return manualInput || dead || targetDead || !partyMember || distance > 200;
+            return manualInput || dead || !partyMember || gap > TetherRange;
+        }
+
+        // Matches the leader's pace with hysteresis: sprint when they sprint
+        // or the gap opens, walk again once close behind a walking leader.
+        public static bool Sprint(bool sprinting, float leaderSpeed, float gap)
+        {
+            if (leaderSpeed > 5f || gap > 7f) return true;
+            if (leaderSpeed < 4f && gap < 4.5f) return false;
+            return sprinting;
         }
     }
 }

@@ -91,7 +91,8 @@ static class CoopChecks
             drive = JonFollow.Rules.VehicleControl(20,-15,15,0,false);
             Check(drive.Brake && drive.Forward == 0 && drive.Steer < 0,"closing speed brakes before reaching stopped friend's vehicle");
             Check(JonFollow.Rules.VehicleControl(70,0,5,5,true).Brake && JonFollow.Rules.VehicleControl(4,0,0,0,false).Forward == 0,"obstruction, cliff or arrival suppresses vehicle acceleration");
-            Check(JonFollow.Rules.CancelFollow(true,false,false,true,20) && JonFollow.Rules.CancelFollow(false,false,true,true,20) && JonFollow.Rules.CancelFollow(false,false,false,false,20) && JonFollow.Rules.CancelFollow(false,false,false,true,201) && !JonFollow.Rules.CancelFollow(false,false,false,true,20),"manual input, death, party departure and lost range cancel follow");
+            Check(JonFollow.Rules.CancelFollow(true,false,true,5) && JonFollow.Rules.CancelFollow(false,true,true,5) && JonFollow.Rules.CancelFollow(false,false,false,5) && JonFollow.Rules.CancelFollow(false,false,true,46) && !JonFollow.Rules.CancelFollow(false,false,true,30),"manual input, own death, party departure and an outpaced tether end follow");
+        Check(JonFollow.Rules.Sprint(false,6,3) && JonFollow.Rules.Sprint(false,1,9) && !JonFollow.Rules.Sprint(true,2,3) && JonFollow.Rules.Sprint(true,4.5f,5),"follower sprints with a sprinting leader or a widening gap and walks when close");
             CheckNativePatches(args[2],args.Skip(3).ToArray());
             Console.WriteLine(checks + " co-op checks passed; native gameplay still requires an in-game session.");
             return 0;
