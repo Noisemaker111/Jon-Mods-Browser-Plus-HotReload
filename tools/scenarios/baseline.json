@@ -1,0 +1,13 @@
+{
+  "name": "server baseline and native systems",
+  "description": "Reusable engine-tier scenario: proves the real headless server is up with every mod loaded, the native nav/POI systems respond, and no mod error appears. Add nav-follow and container steps here as those become scriptable.",
+  "steps": [
+    { "expect_mods": ["JonCategoryStorage", "JonFollow", "JonGroundPings", "JonLootSkulls", "JonPartyPortraits", "JonSharedWaypoints"] },
+    { "expect_clean": "server" },
+    { "tel": "pathtest breakblocks" },
+    { "tel": "pathtest breakblocks" },
+    { "tel": "pois" },
+    { "expect_log": { "who": "server", "pattern": "Distant POIs not active|POIs", "forbid": false } },
+    { "expect_log": { "who": "server", "pattern": "NullReferenceException|IndexOutOfRangeException", "forbid": true } }
+  ]
+}

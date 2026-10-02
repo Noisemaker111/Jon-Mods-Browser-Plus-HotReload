@@ -190,11 +190,56 @@ def config_export():
     return candidates
 
 
+# ---------- scenarios (declarative engine tests) ----------
+def run_scenario(path):
+    """Run a JSON scenario of engine steps. Every step is checked, so a scenario is a
+    reusable, agent-authored test of live behaviour (nav, containers, POIs, UI)."""
+    scenario = json.loads(Path(path).read_text())
+    print("scenario: " + scenario.get("name", Path(path).stem))
+    failed = 0
+    for index, step in enumerate(scenario.get("steps", []), 1):
+        ok, msg = run_step(step)
+        print(("  PASS " if ok else "  FAIL ") + f"[{index}] " + msg)
+        failed += 0 if ok else 1
+    print("scenario " + ("passed" if not failed else f"failed ({failed})"))
+    return 1 if failed else 0
+
+
+def run_step(step):
+    if "tel" in step:
+        tel(step["tel"], wait=step.get("wait", 1.5))
+        return True, "tel " + step["tel"]
+    if "wait" in step:
+        time.sleep(float(step["wait"]))
+        return True, f"wait {step['wait']}s"
+    if "expect_player" in step:
+        name = step["expect_player"]
+        near = step.get("near")
+        tolerance = float(step.get("tolerance", 6.0))
+        seen = players()
+        if name not in seen:
+            return False, f"player {name} present"
+        if near:
+            pos = seen[name]
+            close = abs(pos[0] - near[0]) <= tolerance and abs(pos[2] - near[1]) <= tolerance
+            return close, f"{name} near ({near[0]},{near[1]}) within {tolerance} (at {pos[0]:.0f},{pos[2]:.0f})"
+        return True, f"player {name} present"
+    if "expect_log" in step:
+        spec = step["expect_log"]
+        return check_log(spec.get("who", "server"), spec["pattern"], forbid=spec.get("forbid", False))
+    if "expect_mods" in step:
+        return check_mods(step["expect_mods"])
+    if "expect_clean" in step:
+        return check_no_errors(step.get("who", "server"))
+    return False, "unknown step: " + json.dumps(step)[:80]
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("tel").add_argument("command")
     sub.add_parser("config-export")
+    sub.add_parser("scenario").add_argument("file")
     a = sub.add_parser("assert")
     a.add_argument("kind")
     a.add_argument("args", nargs="*")
@@ -212,6 +257,9 @@ def main():
         for p in paths:
             print(p)
         return 0 if paths else 1
+
+    if ns.cmd == "scenario":
+        return run_scenario(ns.file)
 
     if ns.cmd == "assert":
         ok, msg = run_check(ns.kind, ns.args, forbid=ns.forbid)

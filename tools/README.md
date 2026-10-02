@@ -73,6 +73,19 @@ It is read-only against a running lab (never starts/stops/reconfigures it), allo
 known dev-launch noise, skips client-dependent checks gracefully when no client is
 connected, and exits non-zero on any real failure.
 
+## Engine scenarios (declarative)
+
+Author a live test as JSON and run it — ideal for agents, since it is data, not code:
+
+```
+python tools/engine.py scenario tools/scenarios/baseline.json
+```
+
+Step types: `tel` (console command), `wait` (seconds), `expect_mods`, `expect_clean`,
+`expect_log` (`{who, pattern, forbid}`), and `expect_player` (`{expect_player, near:[x,z],
+tolerance}`). Each step is checked, so a scenario is a reusable proof that nav, containers,
+POIs or UI behaved on the real engine. Add more scenarios under `tools/scenarios/`.
+
 The console is the automation surface and covers the engine-bound systems:
 
 - **Navigation**: `pathTest` modes (breakblocks/climbladders/climbwalls); watch a
