@@ -269,6 +269,10 @@ def main():
         try:
             if code == 0:
                 ok, msg = assert_probe()
+                log = state().get("log", "")
+                text = Path(log).read_text(errors="replace") if log else ""
+                for line in re.findall(r"\[SimProbe\] (ROUTING[^\n]*|PATH[^\n]*)", text):
+                    print("  " + line)
                 print(("PASS " if ok else "FAIL ") + "probe: " + msg)
                 code = 0 if ok else 1
         finally:

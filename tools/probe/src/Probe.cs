@@ -92,6 +92,21 @@ namespace SimProbe
                         ("item mods", "modGunBarrelExtender",
                             new[] { "modGunScopeSmall", "modGunFlashlight", "modGunMuzzleBrake" },
                             new[] { "gunHandgunT1Pistol", "ammo9mmBulletBall", "resourceWood" }),
+                        ("tools", "meleeToolRepairT0StoneAxe",
+                            new[] { "meleeToolAxeT1IronFireaxe", "meleeToolAxeT2SteelAxe", "meleeToolRepairT0TazasStoneAxe" },
+                            new[] { "gunHandgunT1Pistol", "resourceWood", "foodCanChili" }),
+                        ("weapons", "gunHandgunT1Pistol",
+                            new[] { "gunRifleT1HuntingRifle" },
+                            new[] { "ammo9mmBulletBall", "resourceWood", "armorLumberjackBoots" }),
+                        ("armor", "armorLumberjackBoots",
+                            new[] { "armorLumberjackHelmet", "armorLumberjackOutfit", "armorLumberjackGloves" },
+                            new[] { "gunHandgunT1Pistol", "resourceWood" }),
+                        ("vehicles", "vehicleBicycleChassis",
+                            new[] { "vehicleMinibikeChassis", "vehicleMinibikeHandlebars" },
+                            new[] { "resourceWood", "gunHandgunT1Pistol" }),
+                        ("resources", "resourceWood",
+                            new[] { "resourceScrapIron", "resourceWoodBundle" },
+                            new[] { "gunHandgunT1Pistol", "foodCanChili" }),
                     };
 
                     var prefix = stash.GetMethod("Prefix");
@@ -122,7 +137,11 @@ namespace SimProbe
                         finalizer.Invoke(null, new object[] { null });
 
                         int total = group.Accept.Length + group.Reject.Length;
-                        if (rejectedWrong.Count == 0 && acceptedWrong.Count == 0) pass++;
+                        if (rejectedWrong.Count == 0 && acceptedWrong.Count == 0)
+                        {
+                            pass++;
+                            Log.Out("[SimProbe] ROUTING " + group.Group + " ok: seed=" + group.Seed + " accepted " + accepted + "/" + group.Accept.Length + ", rejected " + group.Reject.Length);
+                        }
                         else
                         {
                             fail++;
