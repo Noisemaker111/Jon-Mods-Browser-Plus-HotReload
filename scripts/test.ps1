@@ -32,5 +32,7 @@ Write-Output ('Evidence: ' + $work)
 if ($LASTEXITCODE -ne 0) { throw 'Headless simulation failed' }
 & python (Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\xui-preview.py') --template party_entry --check
 if ($LASTEXITCODE -ne 0) { throw 'Offline UI preview failed' }
+& python (Join-Path (Split-Path $PSScriptRoot -Parent) 'tools\xui-preview.py') --window mainMenu --check
+if ($LASTEXITCODE -ne 0) { throw 'Offline window preview failed' }
 & (Join-Path $PSScriptRoot 'Test-Coop.ps1') -GamePath $GamePath
 if ($LASTEXITCODE -ne 0) { throw 'Individual gameplay verification failed' }

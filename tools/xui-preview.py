@@ -90,6 +90,25 @@ def load_game_template(name):
     raise SystemExit("template not found: " + name)
 
 
+def load_game_window(name):
+    """Return the <windows> document and the window element for `name`."""
+    for root in TEMPLATE_ROOTS:
+        for path in root.glob("*.xml"):
+            try:
+                doc = ET.parse(path)
+            except ET.ParseError:
+                continue
+            element = doc.getroot().find("window[@name='" + name + "']")
+            if element is None:
+                for window in doc.getroot().findall("window"):
+                    if window.get("name") == name:
+                        element = window
+                        break
+            if element is not None:
+                return doc, element, path
+    raise SystemExit("window not found: " + name)
+
+
 def apply_patch(doc, patch_path):
     """Apply one XUi <configs> patch document to the template document."""
     patch = ET.parse(patch_path).getroot()
@@ -201,17 +220,42 @@ class Renderer:
             return default
         return value.strip().lower() not in ("false", "0", "no")
 
-    def render(self, element):
+    def render(self, element, fit=False):
         width = int(number(element.get("width", 0)))
         height = int(number(element.get("height", 0)))
         if width <= 0:
             width = 310
         if height <= 0:
             height = 76
+        if fit:
+            width, height = self.measure(element, width, height)
         img = Image.new("RGBA", (int(width * self.scale), int(height * self.scale)), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         self.draw_children(draw, element, 0.0, 0.0, width, height)
         return img
+
+    def measure(self, element, base_w, base_h):
+        """Bounding box of an element and its descendants in local pixels (y grows
+        downward), so a window that overflows its own height still renders fully."""
+        right, bottom = base_w, base_h
+
+        def walk(parent, ox, oy, pw, ph):
+            nonlocal right, bottom
+            children = [c for c in parent if self.visible(c)]
+            grid = parent.tag == "grid"
+            cell_h = number(parent.get("cell_height", 0))
+            for index, child in enumerate(children):
+                cx_off, cy_off = self.position(child)
+                cw, ch = self.size(child, pw, ph)
+                if grid and cell_h:
+                    cx_off, cy_off = 0.0, index * cell_h
+                cx, cy = ox + cx_off, oy + cy_off
+                right = max(right, cx + cw)
+                bottom = max(bottom, cy + ch)
+                walk(child, cx, cy, cw, ch)
+
+        walk(element, 0.0, 0.0, base_w, base_h)
+        return max(1, int(right)), max(1, int(bottom))
 
     def draw_children(self, draw, parent, origin_x, origin_y, parent_w, parent_h):
         children = [c for c in parent if self.visible(c)]
@@ -254,13 +298,40 @@ class Renderer:
 
         if tag == "label":
             self.draw_label(draw, element, x, y, w_s, h_s)
+        elif tag in ("button", "mainmenubutton") or element.get("caption_key"):
+            self.draw_button(draw, element, x, y, w_s, h_s)
+            self.draw_children(draw, element, x, y, w, h)
         elif tag == "texture":
             self.draw_texture(draw, element, x, y, w_s, h_s)
+        elif tag == "grid":
+            self.draw_grid(draw, element, x, y, w_s, h_s)
         elif tag in ("sprite", "filledsprite") or element.get("type") in ("filled", "sliced"):
             self.draw_sprite(draw, element, x, y, w_s, h_s, parent_w, parent_h)
+            self.draw_children(draw, element, x, y, w, h)
         else:
             self.draw_children(draw, element, x, y, w, h)
 
+    def draw_button(self, draw, element, x, y, w, h):
+        caption = substitute(element.get("caption", ""), self.values)
+        if not caption and element.get("caption_key"):
+            caption = english(substitute(element.get("caption_key"), self.values))
+        draw.rectangle([x, y, x + w, y + h], fill=(38, 34, 46, 235), outline=(150, 132, 92, 255), width=max(1, int(self.scale)))
+        font = self.font(18)
+        bbox = draw.textbbox((0, 0), caption, font=font)
+        draw.text((x + (w - (bbox[2] - bbox[0])) / 2, y + (h - (bbox[3] - bbox[1])) / 2 - bbox[1]), caption, fill=(240, 240, 240, 255), font=font)
+
+    def draw_grid(self, draw, element, x, y, w, h):
+        rows = int(number(element.get("rows", len([c for c in element if c.tag in ("button", "mainmenubutton")]) or 1), 1))
+        cell_h = number(element.get("cell_height", h / max(1, rows)), h / max(1, rows))
+        # Children stack vertically from the grid origin.
+        for index, child in enumerate([c for c in element if self.visible(c)]):
+            cell_y = y + index * cell_h * self.scale
+            child_w = number(child.get("width", element.get("cell_width", w)), w)
+            child_h = number(child.get("height", cell_h), cell_h)
+            if child.tag in ("button", "mainmenubutton") or child.get("caption_key"):
+                self.draw_button(draw, child, x, cell_y, child_w * self.scale, child_h * self.scale)
+            else:
+                self.draw_node(draw, child, x, cell_y, child_w, child_h)
     def draw_sprite(self, draw, element, x, y, w, h, parent_w, parent_h):
         color = parse_color(element.get("color"), self.values) or (180, 180, 180, 255)
         sprite = substitute(element.get("sprite", ""), self.values).strip()
@@ -291,6 +362,8 @@ class Renderer:
         text = substitute(element.get("text", ""), self.values)
         if not text:
             return
+        if text.startswith("{") and text.endswith("}"):
+            text = english(text[1:-1])
         size = number(element.get("font_size", 16), 16)
         color = parse_color(element.get("color"), self.values) or (255, 255, 255, 255)
         justify = element.get("justify", "left")
@@ -305,10 +378,46 @@ class Renderer:
         draw.text((tx, y + 2 * self.scale), text, fill=color, font=font)
 
 
-def find_patches(template_name):
-    """Every mod patch file whose XPath targets this template."""
+def load_localization():
+    """Key -> English text from the game's own Localization.csv, so caption_key
+    buttons preview with real labels instead of tokens."""
+    mapping = {}
+    path = GAME / "Data" / "Config" / "Localization.csv"
+    if not path.exists():
+        return mapping
+    import csv
+    with path.open(encoding="utf-8", errors="replace", newline="") as handle:
+        reader = csv.reader(handle)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return mapping
+        try:
+            lower = [h.strip().lower() for h in header]
+            key_col = lower.index("key")
+            english_col = lower.index("english")
+        except ValueError:
+            return mapping
+        for row in reader:
+            if len(row) > max(key_col, english_col) and row[english_col]:
+                mapping[row[key_col]] = row[english_col]
+    return mapping
+
+
+LOCALIZATION = None
+
+
+def english(text):
+    global LOCALIZATION
+    if LOCALIZATION is None:
+        LOCALIZATION = load_localization()
+    return LOCALIZATION.get(text, "{" + text + "}")
+
+
+def find_patches(template_name, kind="template"):
+    """Every mod patch file whose XPath targets this template or window."""
     hits = []
-    needle = "templates/" + template_name
+    needle = ("templates/" + template_name) if kind == "template" else ("window[@name='" + template_name + "']")
     for base in PATCH_DIRS:
         for path in base.glob("**/Config/XUi_*/*.xml"):
             try:
@@ -332,7 +441,8 @@ def find_patches(template_name):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--template", default="party_entry")
+    parser.add_argument("--template", default="party_entry", help="template name to preview")
+    parser.add_argument("--window", help="window name to preview instead of a template")
     parser.add_argument("--patch", action="append", default=[], help="patch file(s); default = all mods")
     parser.add_argument("--values", help="JSON file of placeholder values")
     parser.add_argument("--state", choices=sorted(STATES), help="preview a built-in player state")
@@ -354,14 +464,19 @@ def main():
                     print(path.name + ": " + ", ".join(names))
         return
 
-    doc, element, source = load_game_template(args.template)
+    target = args.window or args.template
+    kind = "window" if args.window else "template"
+    if args.window:
+        doc, element, source = load_game_window(args.window)
+    else:
+        doc, element, source = load_game_template(args.template)
     original = element
     values = dict(DEFAULT_VALUES)
     if args.state:
         values.update(STATES[args.state])
     if args.values:
         values.update(json.loads(Path(args.values).read_text()))
-    patches = [Path(p) for p in args.patch] if args.patch else find_patches(args.template)
+    patches = [Path(p) for p in args.patch] if args.patch else find_patches(target, kind)
     applied = []
     for patch in patches:
         try:
@@ -369,19 +484,22 @@ def main():
             applied.append(patch)
         except Exception as error:  # keep previewing even if one patch is malformed
             print("skipped " + str(patch) + ": " + str(error))
-    print("base template: " + str(source))
+    print("base " + kind + ": " + str(source))
     for patch in applied:
         print("applied patch: " + str(patch))
-    element = doc.getroot().find(args.template)
-    if element is None:
-        element = original
+    if args.window:
+        element = next((w for w in doc.getroot().findall("window") if w.get("name") == args.window), original)
+    else:
+        element = doc.getroot().find(args.template)
+        if element is None:
+            element = original
     renderer = Renderer(values, args.size)
-    img = renderer.render(element)
+    img = renderer.render(element, fit=bool(args.window))
     if args.check:
         # Sanity render used by the test chain: confirm geometry without writing.
         alpha = img.convert("RGBA").getchannel("A")
         opaque = sum(alpha.histogram()[1:])
-        print("check: " + args.template + " renders " + str(img.size[0]) + "x" + str(img.size[1]) + " with " + str(opaque) + " visible pixels")
+        print("check: " + target + " renders " + str(img.size[0]) + "x" + str(img.size[1]) + " with " + str(opaque) + " visible pixels")
         return 0 if opaque > 100 else 1
     img.save(args.out)
     print("wrote " + args.out + " " + str(img.size))

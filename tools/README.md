@@ -15,23 +15,25 @@ actually catch the mistake; only fall through to the next when it cannot.
 
 ```
 python tools/xui-preview.py --template party_entry --out preview.png --size 2
+python tools/xui-preview.py --window mainMenu --out menu.png        # whole window (menus)
 python tools/xui-preview.py --template party_entry --patch mods/JonPartyPortraits/Config/XUi_InGame/templates.xml
 python tools/xui-preview.py --list
 python tools/xui-preview.py --template party_entry --values overrides.json
 ```
 
-It finds the base template in the game's `Data/Config/XUi_*`, applies each mod's XUi
-patch (`set`/`remove`/`append`/`insertBefore`/`insertAfter`), substitutes `{placeholders}`,
-and draws the result with the game's box model (pos with y-down, width/height, depth,
-`type="filled"` fills, `justify`, `style="iconNNpx"`, pivot). Override any placeholder
-with `--state healthy|low|dead|muted|far` for common states, or `--values file.json` for
-anything else — preview dead, low health, muted voice and far distance instantly. `--check`
-renders without writing an image and is part of the test chain.
+It finds the base template in the game's `Data/Config/XUi_*` (or a whole `--window`), applies
+each mod's XUi patch (`set`/`remove`/`append`/`insertBefore`/`insertAfter`), substitutes
+`{placeholders}` and resolves `caption_key`s from the game's `Localization.csv`, and draws the
+result with the game's box model (pos with y-down, width/height, depth, `type="filled"` fills,
+`justify`, `style="iconNNpx"`, pivot, `<grid>` rows). Override any placeholder with
+`--state healthy|low|dead|muted|far` for common states, or `--values file.json` for anything
+else. `--check` renders without writing an image and is part of the test chain.
 
 ## UI dev loop (live, <1s)
 
 ```
 python tools/xui-watch.py --template party_entry --out preview.png
+python tools/xui-watch.py --window mainMenu --out menu.png
 ```
 
 Keep `preview.png` open in a viewer, edit the mod's `Config/XUi_*/templates.xml`, save,

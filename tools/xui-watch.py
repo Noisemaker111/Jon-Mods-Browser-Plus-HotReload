@@ -33,8 +33,9 @@ def stamp(files):
     return {str(f): f.stat().st_mtime for f in files if f.exists()}
 
 
-def render(template, out, size, state):
-    command = [sys.executable, str(PREVIEW), "--template", template, "--out", str(out), "--size", str(size)]
+def render(template, out, size, state, window=None):
+    command = [sys.executable, str(PREVIEW), "--out", str(out), "--size", str(size)]
+    command += ["--window", window] if window else ["--template", template]
     if state:
         command += ["--state", state]
     result = subprocess.run(command, cwd=str(ROOT), capture_output=True, text=True)
@@ -45,6 +46,7 @@ def render(template, out, size, state):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--template", default="party_entry")
+    parser.add_argument("--window", help="preview a whole window instead of a template")
     parser.add_argument("--mods", nargs="*", help="mod folders to watch (default: all)")
     parser.add_argument("--out", default="preview.png")
     parser.add_argument("--size", type=float, default=2.0)
@@ -52,8 +54,9 @@ def main():
     args = parser.parse_args()
 
     files = watch_roots(args.mods)
-    print("watching " + str(len(files)) + " config files; output -> " + args.out)
-    render(args.template, args.out, args.size, args.state)
+    target = args.window or args.template
+    print("watching " + str(len(files)) + " config files for " + target + "; output -> " + args.out)
+    render(args.template, args.out, args.size, args.state, args.window)
     seen = stamp(files)
     while True:
         time.sleep(0.7)
@@ -62,7 +65,7 @@ def main():
             changed = [f for f in current if seen.get(f) != current[f]]
             print(time.strftime("%H:%M:%S"), "changed:", ", ".join(Path(f).name for f in changed), flush=True)
             seen = current
-            render(args.template, args.out, args.size, args.state)
+            render(args.template, args.out, args.size, args.state, args.window)
 
 
 if __name__ == "__main__":
