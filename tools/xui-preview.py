@@ -36,6 +36,17 @@ DEFAULT_VALUES = {
     "icon1color": "255,255,255,255", "icon2color": "255,255,255,255",
 }
 
+# Ready-made player states so a layout can be checked against real situations.
+STATES = {
+    "healthy": {},
+    "low": {"healthfill": "0.15", "healthcurrentwithmax": "12/100", "staminafill": "0.1",
+            "healthcolor": "255,120,120,255", "jonxpfill": "0.2"},
+    "dead": {"healthfill": "0", "healthcurrentwithmax": "0/100", "partyvisible": "true",
+             "staminafill": "0", "showarrow": "false", "voicevisible": "false"},
+    "muted": {"voicemuted": "true", "voiceactive": "false"},
+    "far": {"distance": "412m", "showarrow": "true", "arrowcolor": "255,180,60,255", "icon1": "ui_game_symbol_food"},
+}
+
 
 def parse_color(text, values):
     if not text:
@@ -324,8 +335,10 @@ def main():
     parser.add_argument("--template", default="party_entry")
     parser.add_argument("--patch", action="append", default=[], help="patch file(s); default = all mods")
     parser.add_argument("--values", help="JSON file of placeholder values")
+    parser.add_argument("--state", choices=sorted(STATES), help="preview a built-in player state")
     parser.add_argument("--out", default="preview.png")
     parser.add_argument("--size", type=float, default=2.0, help="render scale")
+    parser.add_argument("--check", action="store_true", help="headless sanity render (no image)")
     parser.add_argument("--list", action="store_true")
     args = parser.parse_args()
 
@@ -344,6 +357,8 @@ def main():
     doc, element, source = load_game_template(args.template)
     original = element
     values = dict(DEFAULT_VALUES)
+    if args.state:
+        values.update(STATES[args.state])
     if args.values:
         values.update(json.loads(Path(args.values).read_text()))
     patches = [Path(p) for p in args.patch] if args.patch else find_patches(args.template)
@@ -362,9 +377,16 @@ def main():
         element = original
     renderer = Renderer(values, args.size)
     img = renderer.render(element)
+    if args.check:
+        # Sanity render used by the test chain: confirm geometry without writing.
+        alpha = img.convert("RGBA").getchannel("A")
+        opaque = sum(alpha.histogram()[1:])
+        print("check: " + args.template + " renders " + str(img.size[0]) + "x" + str(img.size[1]) + " with " + str(opaque) + " visible pixels")
+        return 0 if opaque > 100 else 1
     img.save(args.out)
     print("wrote " + args.out + " " + str(img.size))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

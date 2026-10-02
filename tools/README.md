@@ -23,7 +23,9 @@ It finds the base template in the game's `Data/Config/XUi_*`, applies each mod's
 patch (`set`/`remove`/`append`/`insertBefore`/`insertAfter`), substitutes `{placeholders}`,
 and draws the result with the game's box model (pos with y-down, width/height, depth,
 `type="filled"` fills, `justify`, `style="iconNNpx"`, pivot). Override any placeholder
-with `--values` to preview states (dead, low health, muted voice) instantly.
+with `--state healthy|low|dead|muted|far` for common states, or `--values file.json` for
+anything else — preview dead, low health, muted voice and far distance instantly. `--check`
+renders without writing an image and is part of the test chain.
 
 Symbols from the game's texture atlases are drawn as labelled placeholders. For a
 pixel-exact frame, take a screenshot of a real client (`lab.py shot A out.png`) — that
