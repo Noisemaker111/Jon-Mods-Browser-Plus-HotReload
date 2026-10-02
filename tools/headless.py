@@ -30,6 +30,8 @@ ROOT = Path(__file__).resolve().parent.parent          # worktree root
 TOOLS = Path(__file__).resolve().parent
 GAME = Path(r"C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die")
 PWsh = shutil.which("pwsh") or "powershell"
+CSC = r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe"
+PROBE = Path(__file__).resolve().parent / "probe"
 PORT, TELNET = 27240, 27249
 
 
@@ -84,6 +86,24 @@ def build_mods():
     return sorted(copied)
 
 
+def build_probe(destination):
+    """Compile the in-engine probe mod into the run's Mods folder."""
+    managed = GAME / "7DaysToDie_Data" / "Managed"
+    package = Path(destination) / "SimProbe"
+    (package / "src").mkdir(parents=True, exist_ok=True)
+    references = [
+        str(managed / "System.Core.dll"), str(managed / "System.dll"),
+        str(managed / "Assembly-CSharp.dll"), str(managed / "UnityEngine.CoreModule.dll"),
+        str(managed / "LogLibrary.dll"),
+        str(GAME / "Mods" / "0_TFP_Harmony" / "0Harmony.dll"),
+    ]
+    command = [CSC, "-noconfig", "-nologo", "-target:library", "-platform:x64", "-langversion:latest",
+               f"-out:{package / 'SimProbe.dll'}"] + [f"-r:{r}" for r in references] + [str(PROBE / "src" / "Probe.cs")]
+    subprocess.run(command, check=True, capture_output=True)
+    shutil.copy(PROBE / "ModInfo.xml", package / "ModInfo.xml")
+    return package
+
+
 def write_config(extra=None):
     text = (GAME / "serverconfig.xml").read_text()
     overrides = {
@@ -113,6 +133,8 @@ def up(wait=180, extra_config=None):
     print("building mods...")
     mods = build_mods()
     print("mods: " + ", ".join(mods))
+    build_probe(RUN / "server" / "Mods")
+    print("probe: SimProbe")
     write_config(extra_config)
     (RUN / "server").mkdir(parents=True, exist_ok=True)
     log = RUN / "server.log"
@@ -164,6 +186,22 @@ def wait_for_log(path, pattern, timeout):
     return False, text
 
 
+def assert_probe(timeout=240):
+    """Wait for the in-engine probe to report and turn it into a check."""
+    log = state().get("log", "")
+    found, text = wait_for_log(log, r"\[SimProbe\] RESULT pass=\d+ fail=\d+", timeout)
+    if not found:
+        misses = re.findall(r"\[SimProbe\] (MISS|MISMATCH|EXC|UNPATCHED|FATAL)[^\n]*", text)
+        detail = ("; " + "; ".join(misses[:5])) if misses else ""
+        return False, "in-engine probe did not report" + detail
+    match = re.search(r"\[SimProbe\] RESULT pass=(\d+) fail=(\d+)", text)
+    passes, fails = int(match.group(1)), int(match.group(2))
+    if fails:
+        problems = ", ".join(re.findall(r"\[SimProbe\] (?:MISMATCH|MISS|EXC|UNPATCHED)[^\n]*", text)[:5])
+        return False, f"in-engine probe {passes} pass / {fails} fail :: {problems}"
+    return True, f"in-engine probe {passes} pass / 0 fail (real mod code inside the engine)"
+
+
 def _engine():
     sys.path.insert(0, str(TOOLS))
     import engine
@@ -178,6 +216,7 @@ def main():
     sub.add_parser("up").add_argument("--wait", type=int, default=180)
     sub.add_parser("down")
     sub.add_parser("run")
+    sub.add_parser("probe")
     sub.add_parser("gen").add_argument("--seed", default="HeadlessGen")
     sub.add_parser("check").add_argument("names", nargs="*")
     sub.add_parser("scenario").add_argument("file")
@@ -204,6 +243,17 @@ def main():
             print(("PASS " if ok else "FAIL ") + name + ": " + msg)
             failed += 0 if ok else 1
         return 1 if failed else 0
+    if ns.cmd == "probe":
+        # up -> in-engine assertions -> down. Proves the real mod code inside the engine.
+        code = up()
+        try:
+            if code == 0:
+                ok, msg = assert_probe()
+                print(("PASS " if ok else "FAIL ") + "probe: " + msg)
+                code = 0 if ok else 1
+        finally:
+            down()
+        return code
     if ns.cmd == "run":
         code = up()
         try:

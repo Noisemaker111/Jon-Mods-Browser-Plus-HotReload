@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xml>
+  <Name value="SimProbe"/>
+  <DisplayName value="Headless Sim Probe"/>
+  <Description value="In-engine assertions for the offline test harness. Not a gameplay mod."/>
+  <Author value="Jon"/>
+  <Version value="0.0.1"/>
+</xml>

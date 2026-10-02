@@ -7,7 +7,8 @@ actually catch the mistake; only fall through to the next when it cannot.
 |------|--------------|---------|-------|
 | **1. Logic** (`scripts/Test-Sim.ps1`) | The mod's real code against the real game assemblies + `Data/Config` XML, in-process | Category/sort routing, item identity, protocol and ledger math, decision helpers, exceptions | ~5s |
 | **2. Static** (`scripts/Test-Coop.ps1`) | The built DLLs analysed against the real game IL (Mono.Cecil) plus patch replay | Harmony targets/argument mismatches, missing native methods, XML patch collisions, package integrity | ~20s |
-| **3. Engine** (`lab.py`) | Real headless dedicated server + real windowed clients, scripted input, screenshots, telnet | Navigation/follow in a live world, POIs and containers, world generation, entities, real XUi on screen, multiplayer | minutes |
+| **3. Engine** (`tools/headless.py`, `lab.py`) | Real headless dedicated server (and real clients), scripted console input, screenshots | Navigation/follow in a live world, POIs and containers, world generation, entities, multiplayer, real UI on screen | minutes |
+| **In-engine probe** (`tools/headless.py probe`) | The real mod code executed **inside** the running engine against the engine's own loaded data | Categories and Harmony patches against the `ItemClass` objects the game actually built, not a reimplementation | ~1 min |
 | **UI** (`tools/xui-preview.py`) | The real XUi patch applied to the real template, rendered to PNG | Panel layout, spacing, colours, which controls exist before touching the game | <1s |
 
 ## UI preview (no launch)
@@ -56,9 +57,16 @@ python tools/headless.py up                  # leave it running, then:
 python tools/headless.py scenario tools/scenarios/my-scenario.json
 python tools/headless.py tel "visitpois start"
 python tools/headless.py check               # default engine checks
+python tools/headless.py probe               # real mod code asserted inside the engine
 python tools/headless.py gen --seed MySeed   # generate an RWG world and assert it (slow, opt-in)
 python tools/headless.py down
 ```
+
+`probe` builds and drops an in-engine probe mod (`tools/probe/`) into the isolated run, then
+asserts the `[SimProbe]` result from the log: the real category code runs against the engine's
+own `ItemClass` registry, known items land in the right bucket, and the Harmony patch is
+confirmed installed on `StackSortUtil.getGroup`. That is end-to-end category verification with
+no manual launch.
 
 `gen` starts the engine with `GameWorld=RWG` and a seed, waits for the engine to finish
 generating (world name + `StartGame done`), and confirms the world data was written. That is
