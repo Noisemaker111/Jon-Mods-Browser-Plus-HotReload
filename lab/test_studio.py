@@ -31,6 +31,27 @@ class StudioTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_pencil_resources_are_native_pixels_and_cached(self):
+        scene = studio.load_scene(server.GAME, self.root, self.key)
+        library = assets.load(server.workspace() / "assets")["assets"]
+        graph = studio.layout(server.GAME, self.root, scene, scene["tree"], {"name": "Native font"}, library)
+        studio.pencil_resources(graph, library, self.home, self.home)
+        pictures = [c for c in graph["controls"] if c.get("imageUrl")]
+        self.assertTrue(pictures)
+        self.assertFalse(any(c.get("imageUrl") for c in graph["controls"] if c["tag"] == "label"))
+        first = pictures[0]
+        from urllib.parse import parse_qs, urlparse
+        path = self.home / parse_qs(urlparse(first["imageUrl"]).query)["path"][0]
+        from PIL import Image
+        expected = studio.render_image({"controls": [{**first, "box": [0, 0, *first["box"][2:]]}], "bounds": [0, 0, *first["box"][2:]]}, library)
+        with Image.open(path) as actual:
+            self.assertEqual(actual.tobytes(), expected.tobytes())
+        before = path.stat().st_mtime_ns
+        url_before = first["imageUrl"]
+        studio.pencil_resources(graph, library, self.home, self.home)
+        self.assertEqual(first["imageUrl"], url_before)
+        self.assertEqual(path.stat().st_mtime_ns, before)
+
     def test_real_xml_save_round_trip_backup_and_conflict(self):
         scene = studio.load_scene(server.GAME, self.root, self.key)
         tree = copy.deepcopy(scene["tree"])

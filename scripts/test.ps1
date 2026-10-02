@@ -46,4 +46,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Browser lab JavaScript syntax check failed' }
 if ($LASTEXITCODE -ne 0) { throw 'UI editor JavaScript syntax check failed' }
 & node (Join-Path $repo 'lab/test-model.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Browser lab coordinate/replay checks failed' }
+$pencilSource = Join-Path (Split-Path $common -Parent) '.scratch/reference/open-pencil-v0.15.1'
+$bun = Get-Command bun -ErrorAction SilentlyContinue
+if ($bun -and (Test-Path (Join-Path $pencilSource 'node_modules'))) {
+    & $bun.Source (Join-Path $repo 'lab/pencil/test-adapter.mjs') $pencilSource
+    if ($LASTEXITCODE -ne 0) { throw 'Real OpenPencil/XUi adapter round-trip checks failed' }
+} else {
+    Write-Output 'SKIP OpenPencil graph checks: build the optional local editor with python lab/pencil/build.py first'
+}
 Write-Output 'PASS browser lab job reruns, isolation, local API protection, telemetry retention and drawing persistence'

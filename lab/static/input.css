@@ -142,3 +142,5 @@
   dialog::backdrop { @apply bg-black/65; }
   dialog img { @apply block max-h-[78vh] max-w-[88vw]; }
 }
+/* The actual upstream editor owns its internal UI and styling. */
+.pencil-editor { width: 100%; height: max(620px, 72vh); border: 0; display: block; background: #1e1e1e; }

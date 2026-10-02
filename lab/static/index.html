@@ -92,34 +92,25 @@
         <span id="studio-source" class="font-mono text-[10px] text-muted">Loading native scene…</span>
         <span id="studio-status" class="badge">Loading</span>
       </div>
-      <div class="grid items-start gap-4 xl:grid-cols-[205px_minmax(0,1fr)_255px]">
-        <aside class="panel p-4">
-          <div class="panel-heading"><h2>Layers</h2><span id="studio-layer-count" class="text-[10px] text-muted"></span></div>
-          <input id="studio-layer-search" class="mb-3 w-full" placeholder="Find a layer…" aria-label="Find a layer">
-          <div id="studio-layers" class="studio-layers"></div>
-          <hr>
-          <label>Add control<select id="studio-add-type"><option value="label">Label</option><option value="sprite">Sprite / icon</option><option value="rect">Container</option><option value="texture">Texture</option><option value="grid">Grid</option></select></label>
-          <button id="studio-add" class="quiet mt-3 w-full">+ Add layer</button>
-          <div class="toolbar mt-3"><button id="studio-duplicate" class="quiet">Duplicate</button><button id="studio-delete" class="quiet">Delete</button></div>
-        </aside>
-        <div class="panel overflow-hidden">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
-            <div class="toolbar"><button id="studio-undo" class="quiet" aria-label="Undo edit">Undo</button><button id="studio-redo" class="quiet" aria-label="Redo edit">Redo</button><button id="studio-fit" class="quiet">Fit</button><button id="studio-zoom-out" class="quiet" aria-label="Zoom out">−</button><span id="studio-zoom-label" class="w-10 text-center font-mono text-[10px] text-muted">100%</span><button id="studio-zoom-in" class="quiet" aria-label="Zoom in">+</button></div>
-            <label class="check-label"><input id="studio-outlines" type="checkbox" checked>Selection bounds</label>
-          </div>
-          <canvas id="studio-canvas" class="h-[480px] w-full touch-none" tabindex="0" aria-label="Editable game UI. Click a control to select it, drag to move, use the corner handle to resize, or arrow keys to nudge."></canvas>
-          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3"><span id="studio-render-info" class="text-[10px] text-muted">Native atlas sprites · native game font</span><div class="toolbar"><button id="studio-png" class="quiet">Export PNG</button><button id="studio-export" class="quiet">Export XML patch</button></div></div>
-          <div id="studio-warnings" class="border-t border-border p-3 text-[10px] leading-relaxed text-muted" hidden></div>
-        </div>
-        <aside class="panel p-4">
+      <div class="panel overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3"><strong class="text-sm">OpenPencil · full local editor</strong><div class="toolbar"><button id="studio-fit" class="quiet">Fit scene</button><button id="studio-native-preview" class="quiet">Refresh native preview</button><button id="studio-png" class="quiet">Export game PNG</button><button id="studio-export" class="quiet">Export XML patch</button></div></div>
+        <p id="pencil-setup" class="p-4 text-xs text-muted" hidden>Build the local editor once: <code>python lab/pencil/build.py</code>, then reload this page.</p>
+        <iframe id="studio-pencil" class="pencil-editor" title="OpenPencil full design editor" allow="clipboard-read; clipboard-write"></iframe>
+        <div id="studio-render-info" class="border-t border-border p-3 text-[10px] text-muted">Native atlas sprites · native game font</div>
+        <div id="studio-warnings" class="border-t border-border p-3 text-[10px] leading-relaxed text-muted" hidden></div>
+      </div>
+      <div class="mt-4 grid items-start gap-4 lg:grid-cols-2">
+        <aside class="panel p-4"><details>
+          <summary>Game attributes & native assets</summary>
           <div class="panel-heading"><h2>Inspector</h2><span id="studio-selected-type" class="badge">Select a layer</span></div>
           <div id="studio-inspector" class="grid gap-3"><p class="text-xs text-muted">Select a control in the canvas or layer list.</p></div>
-          <hr><h2 class="mb-3 text-sm">Preview state</h2>
+        </details></aside>
+        <aside class="panel p-4"><details><summary>Game preview state</summary>
           <label class="mb-3">Player state<select id="studio-state"><option value="healthy">Healthy</option><option value="low">Low health</option><option value="dead">Dead</option><option value="muted">Muted</option><option value="far">Far away</option></select></label>
           <label class="mb-3">Name<input id="studio-player-name" value="NoisemakerJon" maxlength="80"></label>
           <label class="mb-3">Distance<input id="studio-distance" value="128m" maxlength="30"></label>
           <details><summary>All binding values (JSON)</summary><textarea id="studio-values" class="studio-code mt-3" rows="8" aria-label="All preview binding values"></textarea><button id="studio-apply-values" class="quiet mt-2">Apply bindings</button></details>
-        </aside>
+        </details></aside>
       </div>
       <div class="panel mt-4 p-4"><details><summary>Generated game patch & save details</summary><p id="studio-save-info" class="my-3 text-xs leading-relaxed text-muted">Edits are automatically saved as a private draft. Save to mod XML writes an actual source patch with a backup and conflict protection; nothing is installed into your normal game.</p><pre id="studio-xml"></pre></details></div>
       <div class="panel mt-6 p-5 lg:p-6"><div class="panel-heading"><h2>Evidence library</h2><div class="toolbar"><input id="artifact-filter" placeholder="Search images…" aria-label="Filter images"><button id="refresh-gallery" class="quiet">Refresh</button></div></div><div id="gallery" class="gallery"></div></div>
@@ -168,14 +159,8 @@
 
     <!-- DESIGN BOARD -->
     <section id="board" class="page">
-      <div class="panel mb-5 flex flex-wrap items-end gap-3 p-4">
-        <label class="w-36">Tool<select id="board-tool"><option value="pen">Freehand</option><option value="rect">Box</option><option value="arrow">Arrow</option><option value="text">Label</option></select></label>
-        <label class="min-w-52 flex-1">Label<input id="board-text" placeholder="Inventory → category → chest" maxlength="200"></label>
-        <label>Ink<input id="board-color" class="h-10 w-12 cursor-pointer rounded-lg border border-border bg-surface p-1" type="color" value="#635bdb"></label>
-        <button id="board-undo" class="quiet">Undo</button><button id="board-save" class="primary">Save board</button><button id="board-export" class="quiet">Export PNG</button>
-      </div>
-      <div class="panel p-3"><canvas id="board-canvas" aria-label="Design drawing board"></canvas></div>
-      <p id="board-state" class="mt-3 text-xs text-muted"></p>
+      <p class="mb-4 text-xs text-muted">OpenPencil's full design workspace, without XML restrictions. Save designs through its File menu. Earlier sketches remain untouched: <a class="underline" href="/api/drawings/design-board" target="_blank" rel="noopener">original sketch JSON ↗</a></p>
+      <div class="panel overflow-hidden"><iframe id="design-pencil" class="pencil-editor" title="OpenPencil unrestricted design workspace" allow="clipboard-read; clipboard-write"></iframe></div>
     </section>
     <footer class="mt-10 flex items-center justify-between border-t border-border pt-5 text-[10px] text-muted"><span>7 Days Mod Lab</span><span>Real checks. Local evidence. Your saves stay untouched.</span></footer>
   </main>

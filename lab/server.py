@@ -363,7 +363,13 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+        if urlparse(self.path).path.startswith("/pencil/"):
+            # CanvasKit requires WASM; Vue/OpenPencil positions its own controls
+            # with inline styles. Only this locally built editor may be embedded.
+            policy = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self'; font-src 'self' blob:; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+        else:
+            policy = "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        self.send_header("Content-Security-Policy", policy)
         self.end_headers()
         self.wfile.write(data)
 
@@ -380,6 +386,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.file(STATIC / "index.html")
             if route.startswith("/static/"):
                 return self.file(safe_child(STATIC, route[8:]))
+            if route.startswith("/pencil/"):
+                return self.file(safe_child(workspace() / "pencil/app", route[8:] or "index.html"))
             if route == "/file":
                 path = safe_child(scratch(), query.get("path", [""])[0])
                 if path.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
@@ -474,8 +482,11 @@ class Handler(BaseHTTPRequestHandler):
                 values = data.get("values", {})
                 if not isinstance(values, dict) or len(values) > 300:
                     raise ValueError("Expected a small binding-value dictionary")
-                return self.reply(200, studio.layout(GAME, ROOT, scene, data.get("tree", scene["tree"]), values,
-                                                     game_assets.load(workspace() / "assets")["assets"]))
+                assets = game_assets.load(workspace() / "assets")["assets"]
+                graph = studio.layout(GAME, ROOT, scene, data.get("tree", scene["tree"]), values, assets)
+                if data.get("pencil"):
+                    studio.pencil_resources(graph, assets, workspace(), scratch())
+                return self.reply(200, graph)
             if route == "/api/studio/png":
                 scene = studio.load_scene(GAME, ROOT, data.get("key"))
                 assets = game_assets.load(workspace() / "assets")["assets"]

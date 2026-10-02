@@ -97,6 +97,23 @@ class WorkspaceTests(unittest.TestCase):
         threading.Thread(target=http.serve_forever, daemon=True).start()
         base = "http://127.0.0.1:" + str(http.server_port)
         try:
+            app = server.workspace() / "pencil/app"
+            app.mkdir(parents=True)
+            (app / "index.html").write_text("<!doctype html><title>Editor fixture</title>")
+            (app / "canvaskit.wasm").write_bytes(b"\x00asm")
+            with urlopen(base + "/pencil/") as response:
+                policy = response.headers["Content-Security-Policy"]
+                self.assertIn("frame-ancestors 'self'", policy)
+                self.assertIn("'wasm-unsafe-eval'", policy)
+                self.assertNotIn("https:", policy)
+            with urlopen(base + "/") as response:
+                policy = response.headers["Content-Security-Policy"]
+                self.assertIn("frame-ancestors 'none'", policy)
+                self.assertNotIn("'wasm-unsafe-eval'", policy)
+            with urlopen(base + "/pencil/canvaskit.wasm") as response:
+                self.assertEqual(response.headers["Content-Type"], "application/wasm")
+            with self.assertRaises(HTTPError):
+                urlopen(base + "/pencil/%2e%2e/outside")
             with self.assertRaises(HTTPError) as error:
                 urlopen(base + "/api/run?job=sim")
             self.assertEqual(error.exception.code, 404)

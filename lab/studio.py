@@ -529,6 +529,26 @@ def localization(game):
     return _LOCALIZATION[str(game)]
 
 
+def pencil_resources(graph, assets, workspace, scratch):
+    """Real nine-sliced/tinted sprites for OpenPencil image fills, never text screenshots."""
+    from urllib.parse import urlencode
+    directory = workspace / "pencil/resources"
+    directory.mkdir(parents=True, exist_ok=True)
+    indexed = {a["id"]: a for a in assets}
+    for control in graph["controls"]:
+        if not control.get("asset") or control["tag"] == "label":
+            continue
+        # Position does not affect a sprite's pixels. Content/size/tint do.
+        visual = {**control, "box": [0, 0, *control["box"][2:]]}
+        visual.pop("imageUrl", None)
+        source = Path(indexed[control["asset"]]["file"]).stat()
+        digest = hashlib.sha256(json.dumps([visual, source.st_mtime_ns, source.st_size], sort_keys=True).encode()).hexdigest()
+        path = directory / (digest + ".png")
+        if not path.exists():
+            render_image({"controls": [visual], "bounds": visual["box"]}, assets).save(path)
+        control["imageUrl"] = "/file?" + urlencode({"path": str(path.relative_to(scratch))})
+
+
 def render_image(layout_data, assets, scale=2):
     """Raster export using actual atlas crops and the extracted native font."""
     from PIL import Image, ImageChops, ImageDraw, ImageFont

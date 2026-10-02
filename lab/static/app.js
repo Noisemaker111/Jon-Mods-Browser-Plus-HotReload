@@ -38,7 +38,12 @@ function navigate(tab) {
   }[tab];
   location.hash = tab;
   if (tab === 'map') drawMap();
-  if (tab === 'board') drawBoard();
+  if (tab === 'board' && !$('#design-pencil').getAttribute('src')) {
+    fetch('/pencil/build.json').then(response => {
+      if (!response.ok) throw new Error('Build OpenPencil first: python lab/pencil/build.py');
+      $('#design-pencil').src = '/pencil/';
+    }).catch(fail);
+  }
 }
 all('nav button').forEach(b => b.onclick = () => navigate(b.dataset.tab));
 window.addEventListener('hashchange', () => navigate(location.hash.slice(1)));
@@ -46,7 +51,7 @@ function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   localStorage.setItem('lab-theme-v2', theme);
   $('#theme').textContent = theme === 'light' ? 'Dark theme' : 'Light theme';
-  drawMap(); drawBoard();
+  drawMap();
 }
 $('#theme').onclick = () => applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
 
@@ -322,9 +327,7 @@ $('#map-undo').onclick = () => { map.shapes.pop(); mapChanged(); };
 async function saveMap() { if (!map.world) return; const result = await api('/api/drawings/map-' + map.world.name, {shapes: map.shapes, world: map.world.name}); map.dirty = false; $('#map-save-state').textContent = 'Saved · ' + result.path; }
 $('#map-save').onclick = action(saveMap);
 
-// Design board and map use the same serializable drawing shapes. Agents can write
-// drawing JSON through the same local API; no markup or arbitrary code is executed.
-const board = {shapes: [], draft: null, dirty: false};
+// World-coordinate annotations remain a map tool, not a homemade design editor.
 function drawShape(ctx, shape, convert) {
   const points = shape.points || []; if (!points.length) return;
   ctx.strokeStyle = shape.color || '#e6bd7b'; ctx.fillStyle = shape.color || '#e6bd7b'; ctx.lineWidth = 2;
@@ -338,26 +341,6 @@ function drawShape(ctx, shape, convert) {
     }
   }
 }
-function drawBoard() {
-  const dimensions = canvasContext($('#board-canvas')); if (!dimensions) return;
-  const {ctx, width, height} = dimensions, theme = colors(); ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = theme.line;
-  for (let x = 16; x < width; x += 24) for (let y = 16; y < height; y += 24) ctx.fillRect(x, y, 1, 1);
-  const convert = p => [p[0] / 1200 * width, p[1] / 700 * height];
-  for (const shape of [...board.shapes, ...(board.draft ? [board.draft] : [])]) drawShape(ctx, shape, convert);
-}
-function boardPoint(e) { const c = $('#board-canvas'), [x, y] = pointerPosition(e, c); return [x / c.clientWidth * 1200, y / c.clientHeight * 700]; }
-function boardChanged() { board.dirty = true; $('#board-state').textContent = 'Unsaved changes'; drawBoard(); }
-$('#board-canvas').onpointerdown = e => {
-  const point = boardPoint(e), type = $('#board-tool').value, color = $('#board-color').value;
-  if (type === 'text') { if ($('#board-text').value.trim()) { board.shapes.push({type, color, points: [point], text: $('#board-text').value}); boardChanged(); } return; }
-  e.target.setPointerCapture(e.pointerId); board.draft = {type, color, points: [point, point]}; drawBoard();
-};
-$('#board-canvas').onpointermove = e => { if (!board.draft) return; const p = boardPoint(e); if (board.draft.type === 'pen') board.draft.points.push(p); else board.draft.points[1] = p; drawBoard(); };
-$('#board-canvas').onpointerup = () => { if (board.draft) { board.shapes.push(board.draft); board.draft = null; boardChanged(); } };
-$('#board-canvas').onpointercancel = () => { board.draft = null; drawBoard(); };
-$('#board-undo').onclick = () => { board.shapes.pop(); boardChanged(); };
-$('#board-save').onclick = action(async () => { const result = await api('/api/drawings/design-board', {shapes: board.shapes, size: [1200, 700]}); board.dirty = false; $('#board-state').textContent = 'Saved · ' + result.path; });
 async function exportCanvas(canvas, kind) {
   const result = await api('/api/exports', {kind, png: canvas.toDataURL('image/png')});
   const notice = $('#notice'), link = node('a', 'font-semibold underline', 'Open saved PNG ↗');
@@ -365,9 +348,9 @@ async function exportCanvas(canvas, kind) {
   notice.replaceChildren(document.createTextNode(`Saved to ${result.path} · `), link); notice.hidden = false;
   await loadGallery();
 }
-$('#board-export').onclick = action(() => exportCanvas($('#board-canvas'), 'design')); $('#map-export').onclick = action(() => exportCanvas(worldCanvas, 'map'));
-window.addEventListener('beforeunload', e => { if (map.dirty || board.dirty) { e.preventDefault(); e.returnValue = ''; } });
-new ResizeObserver(drawMap).observe(worldCanvas); new ResizeObserver(drawBoard).observe($('#board-canvas'));
+$('#map-export').onclick = action(() => exportCanvas(worldCanvas, 'map'));
+window.addEventListener('beforeunload', e => { if (map.dirty) { e.preventDefault(); e.returnValue = ''; } });
+new ResizeObserver(drawMap).observe(worldCanvas);
 
 async function init() {
   $('#address').textContent = location.host;
@@ -389,10 +372,11 @@ async function init() {
     } catch (error) { fail(error); } finally { refreshing = false; }
   }, 1000);
   window.addEventListener('focus', () => refreshJobs().catch(fail));
-  await initStudio({api, startJob, fail, loadGallery});
+  // A hidden editor or a failed WASM load must not hold tests, maps or evidence
+  // hostage while its renderer waits for a visible viewport.
+  initStudio({api, startJob, fail, loadGallery}).catch(fail);
   const worlds = await api('/api/worlds'); $('#world').replaceChildren(...worlds.map(w => new Option(w.name, w.name)));
   if (worlds.length) { $('#world').value = worlds.some(w => w.name === 'Navezgane') ? 'Navezgane' : worlds[0].name; await loadWorld(); }
-  board.shapes = (await api('/api/drawings/design-board')).shapes || [];
-  await Promise.all([refreshRecordings(), loadGallery()]); drawBoard();
+  await Promise.all([refreshRecordings(), loadGallery()]);
 }
 init().catch(fail);
