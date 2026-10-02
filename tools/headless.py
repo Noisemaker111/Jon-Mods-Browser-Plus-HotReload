@@ -92,6 +92,7 @@ def build_probe(destination):
     package = Path(destination) / "SimProbe"
     (package / "src").mkdir(parents=True, exist_ok=True)
     references = [
+        str(managed / "netstandard.dll"),
         str(managed / "System.Core.dll"), str(managed / "System.dll"),
         str(managed / "Assembly-CSharp.dll"), str(managed / "UnityEngine.CoreModule.dll"),
         str(managed / "LogLibrary.dll"),

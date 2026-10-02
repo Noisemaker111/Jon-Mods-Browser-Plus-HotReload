@@ -92,6 +92,59 @@ namespace SimProbe
                     if (snapshotHeld) pass++; else { Log.Out("[SimProbe] CONTAINER a mid-transfer item enabled its own category"); fail++; }
                 }
 
+                // Pathfinding, against real world geometry the server has loaded:
+                // a nearby route must be found and every route cell must be walkable.
+                var world = GameManager.Instance != null ? GameManager.Instance.World : null;
+                var gridPath = FindType("JonFollow.GridPath");
+                if (world != null && gridPath != null)
+                {
+                    object path = Activator.CreateInstance(gridPath);
+                    var begin = gridPath.GetMethod("Begin");
+                    var cont = gridPath.GetMethod("Continue");
+                    var hasProp = gridPath.GetProperty("Has");
+                    var pointsProp = gridPath.GetProperty("Points");
+
+                    bool started = false; Vector3 a = default, b = default;
+                    foreach (int x in new[] { 420, 440, 460, 480, 380, 500 }) foreach (int z in new[] { 640, 660, 680, 700 })
+                    {
+                        Vector3 sa, sb;
+                        bool oka = Stand(world, x, z, out sa), okb = Stand(world, x + 20, z + 20, out sb);
+                        if (!oka || !okb) continue;
+                        Log.Out("[SimProbe] PATH probe (" + x + "," + z + ") terrH=" + world.GetTerrainHeight(x, z) + " a=" + sa + " b=" + sb);
+                        if ((bool)begin.Invoke(path, new object[] { world, sa, sb })) { started = true; a = sa; b = sb; break; }
+                    }
+                    bool? result = started ? null : false;
+                    int guard = 0;
+                    while (result == null && guard++ < 4000) result = (bool?)cont.Invoke(path, null);
+                    if (!started)
+                    {
+                        Log.Out("[SimProbe] PATH skipped (no terrain streamed on a playerless server)");
+                    }
+                    else
+                    {
+                        bool hasRoute = result == true && (bool)hasProp.GetValue(path);
+                        bool walkable = hasRoute;
+                        if (hasRoute)
+                        {
+                            var points = (System.Collections.IEnumerable)pointsProp.GetValue(path);
+                            int checkedCells = 0, blocked = 0;
+                            foreach (Vector3 p in points)
+                            {
+                                checkedCells++;
+                                int px = (int)Math.Floor(p.x), py = (int)Math.Floor(p.y), pz = (int)Math.Floor(p.z);
+                                var cell = world.GetBlock(px, py, pz);
+                                var below = world.GetBlock(px, py - 1, pz);
+                                if (!cell.isair && !cell.isWater) blocked++;
+                                if (below.isair) blocked++;
+                            }
+                            walkable = checkedCells > 0 && blocked == 0;
+                            if (!walkable) Log.Out("[SimProbe] PATH route has " + blocked + " blocked cells of " + checkedCells);
+                        }
+                        if (hasRoute) pass++; else { Log.Out("[SimProbe] PATH no route found on real terrain"); fail++; }
+                        if (walkable) pass++; else { Log.Out("[SimProbe] PATH route passes through solid blocks"); fail++; }
+                    }
+                }
+
                 Log.Out("[SimProbe] RESULT pass=" + pass + " fail=" + fail);
             }
             catch (Exception error)
@@ -109,5 +162,26 @@ namespace SimProbe
             }
             return null;
         }
+
+        // The topmost standable cell at a column, matching GridPath's own rule. Forces the
+        // chunk to load first: a dedicated server with no players has streamed nothing.
+        static bool Stand(World world, int x, int z, out Vector3 position)
+        {
+            position = default;
+            try { world.GetChunkSync(x >> 4, z >> 4); } catch { }
+            int top = Math.Max(10, (int)world.GetHeight(x, z) + 4);
+            for (int y = Math.Min(200, top + 8); y > 2; y--)
+            {
+                if (Open(world, x, y, z) && Open(world, x, y + 1, z) && Solid(world, x, y - 1, z))
+                {
+                    position = new Vector3(x + 0.5f, y, z + 0.5f);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static bool Open(World world, int x, int y, int z) { var b = world.GetBlock(x, y, z); return b.isair || b.isWater; }
+        static bool Solid(World world, int x, int y, int z) { var b = world.GetBlock(x, y, z); return !b.isair; }
     }
 }
