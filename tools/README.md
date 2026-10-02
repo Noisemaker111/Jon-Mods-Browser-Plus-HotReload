@@ -27,6 +27,17 @@ with `--state healthy|low|dead|muted|far` for common states, or `--values file.j
 anything else — preview dead, low health, muted voice and far distance instantly. `--check`
 renders without writing an image and is part of the test chain.
 
+## UI dev loop (live, <1s)
+
+```
+python tools/xui-watch.py --template party_entry --out preview.png
+```
+
+Keep `preview.png` open in a viewer, edit the mod's `Config/XUi_*/templates.xml`, save,
+and the image updates about a second later. No game launch, no menu navigation, no reload.
+Tune a panel's size, spacing and colours until it looks right, then confirm once in a real
+client (`lab.py shot A out.png`) — that single launch is the 1:1 check, not the iteration loop.
+
 Symbols from the game's texture atlases are drawn as labelled placeholders. For a
 pixel-exact frame, take a screenshot of a real client (`lab.py shot A out.png`) — that
 is the 1:1 confirmation of what the preview laid out.
