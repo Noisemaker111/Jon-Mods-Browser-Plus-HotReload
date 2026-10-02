@@ -56,8 +56,13 @@ python tools/headless.py up                  # leave it running, then:
 python tools/headless.py scenario tools/scenarios/my-scenario.json
 python tools/headless.py tel "visitpois start"
 python tools/headless.py check               # default engine checks
+python tools/headless.py gen --seed MySeed   # generate an RWG world and assert it (slow, opt-in)
 python tools/headless.py down
 ```
+
+`gen` starts the engine with `GameWorld=RWG` and a seed, waits for the engine to finish
+generating (world name + `StartGame done`), and confirms the world data was written. That is
+"generations" tested outside the game: any seed, any size, asserted, then thrown away.
 
 **Interactive lab (real clients, real input, screenshots):** the existing `lab.py` launches an
 isolated headless server plus two isolated windowed clients with its own user-data folders,

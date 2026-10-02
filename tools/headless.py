@@ -84,7 +84,7 @@ def build_mods():
     return sorted(copied)
 
 
-def write_config():
+def write_config(extra=None):
     text = (GAME / "serverconfig.xml").read_text()
     overrides = {
         "ServerName": "Headless", "ServerPort": str(PORT), "ServerVisibility": "0",
@@ -94,6 +94,8 @@ def write_config():
         "ServerMaxPlayerCount": "2", "UserDataFolder": str(RUN / "server"),
         "ServerDisabledNetworkProtocols": "SteamNetworking", "EnemySpawnMode": "false",
     }
+    if extra:
+        overrides.update(extra)
     for key, value in overrides.items():
         pattern = re.compile(r'(<property\s+name="' + key + r'"\s+value=")[^"]*(")')
         if pattern.search(text):
@@ -103,7 +105,7 @@ def write_config():
     (RUN / "serverconfig.xml").write_text(text, encoding="utf-8")
 
 
-def up(wait=180):
+def up(wait=180, extra_config=None):
     RUN.mkdir(parents=True, exist_ok=True)
     if state().get("pid") and alive(state()["pid"]):
         print("already running: pid " + str(state()["pid"]))
@@ -111,7 +113,7 @@ def up(wait=180):
     print("building mods...")
     mods = build_mods()
     print("mods: " + ", ".join(mods))
-    write_config()
+    write_config(extra_config)
     (RUN / "server").mkdir(parents=True, exist_ok=True)
     log = RUN / "server.log"
     if log.exists():
@@ -150,6 +152,18 @@ def down():
     return 0
 
 
+def wait_for_log(path, pattern, timeout):
+    deadline = time.time() + timeout
+    text = ""
+    while time.time() < deadline:
+        if Path(path).exists():
+            text = Path(path).read_text(errors="replace")
+            if re.search(pattern, text, re.I):
+                return True, text
+        time.sleep(2)
+    return False, text
+
+
 def _engine():
     sys.path.insert(0, str(TOOLS))
     import engine
@@ -164,6 +178,7 @@ def main():
     sub.add_parser("up").add_argument("--wait", type=int, default=180)
     sub.add_parser("down")
     sub.add_parser("run")
+    sub.add_parser("gen").add_argument("--seed", default="HeadlessGen")
     sub.add_parser("check").add_argument("names", nargs="*")
     sub.add_parser("scenario").add_argument("file")
     sub.add_parser("tel").add_argument("command")
@@ -197,6 +212,29 @@ def main():
         finally:
             down()
         return code
+    if ns.cmd == "gen":
+        # Generate a random world (RWG) from a seed inside the isolated run, then confirm
+        # the engine produced it and the world is live. Slower (minutes); opt-in.
+        RUN.mkdir(parents=True, exist_ok=True)
+        code = up(wait=180, extra_config={
+            "GameWorld": "RWG", "WorldGenSeed": ns.seed, "WorldGenSize": "6144", "GameName": "HeadlessRWG",
+        })
+        try:
+            if code != 0:
+                return code
+            log = state().get("log", "")
+            print("generating world from seed " + ns.seed + " (this is the slow part)...")
+            generated, text = wait_for_log(log, r"Generating\s+\w[\w ]*", 900)
+            names = re.findall(r"Generating\s+([A-Za-z][\w ]*)", text)
+            name = names[-1].strip() if names else "?"
+            finished, text = wait_for_log(log, r"StartGame done", 900)
+            print(("PASS" if generated else "FAIL") + " engine generated a random world: '" + name + "'")
+            print(("PASS" if finished else "FAIL") + " generated world reached StartGame done")
+            world_dir = RUN / "server" / "Saves" / name
+            print(("PASS" if world_dir.exists() else "FAIL") + " generated world data written to " + str(world_dir))
+            return 0 if (generated and finished and world_dir.exists()) else 1
+        finally:
+            down()
 
 
 if __name__ == "__main__":
