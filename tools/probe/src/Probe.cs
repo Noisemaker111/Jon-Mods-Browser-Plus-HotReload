@@ -69,27 +69,67 @@ namespace SimProbe
                 if (patched) pass++; else { Log.Out("[SimProbe] UNPATCHED StackSortUtil.getGroup"); fail++; }
 
                 // Container routing, with a real Bag and the mod's real StashItems decision:
-                // one representative item must route its whole category and nothing else, and
-                // a category added mid-transfer must not enable itself (snapshot semantics).
+                // a box seeded with one representative item must accept every item in that
+                // item's family and reject the others. This is the whole "one scavenger book
+                // in the box, drop the next one in" class of behavior, across every family.
                 var stash = FindType("JonCategoryStorage.StashCategories");
                 if (stash != null)
                 {
-                    var bag = new Bag(8);
-                    var slots = bag.GetSlots();
-                    slots[0] = new ItemStack(ItemClass.GetItem("schematicMaster", false), 1);
+                    var routing = new (string Group, string Seed, string[] Accept, string[] Reject)[]
+                    {
+                        ("books", "bookFiremansAlmanacAxes",
+                            new[] { "bookFiremansAlmanacHeat", "bookFiremansAlmanacSpeed", "skillBookMaster", "modGunBarrelExtenderSchematic", "schematicMaster" },
+                            new[] { "ammo9mmBulletBall", "gunHandgunT1Pistol", "medicalBandage", "foodCanChili" }),
+                        ("ammunition", "ammo9mmBulletBall",
+                            new[] { "ammo44MagnumBulletBall", "ammo762mmBulletBall", "ammoBundle9mmBulletBall" },
+                            new[] { "bookFiremansAlmanacAxes", "medicalBandage", "resourceWood" }),
+                        ("medicine", "medicalFirstAidBandage",
+                            new[] { "medicalFirstAidKit", "medicalBandage", "medicalAloeCream" },
+                            new[] { "foodCanBeef", "ammo9mmBulletBall", "resourceWood" }),
+                        ("food", "foodCanChili",
+                            new[] { "foodCanBeef", "foodCanChicken", "foodCanLamb" },
+                            new[] { "medicalBandage", "ammo9mmBulletBall", "gunHandgunT1Pistol" }),
+                        ("item mods", "modGunBarrelExtender",
+                            new[] { "modGunScopeSmall", "modGunFlashlight", "modGunMuzzleBrake" },
+                            new[] { "gunHandgunT1Pistol", "ammo9mmBulletBall", "resourceWood" }),
+                    };
+
                     var prefix = stash.GetMethod("Prefix");
                     var hasCategory = stash.GetMethod("HasCategory");
                     var finalizer = stash.GetMethod("Finalizer");
-                    prefix.Invoke(null, new object[] { bag });
-                    bool bookRoutes = (bool)hasCategory.Invoke(null, new object[] { bag, ItemClass.GetItem("modGunBarrelExtenderSchematic", false) });
-                    bool pistolRejected = !(bool)hasCategory.Invoke(null, new object[] { bag, ItemClass.GetItem("gunHandgunT1Pistol", false) });
-                    slots[1] = new ItemStack(ItemClass.GetItem("gunHandgunT1Pistol", false), 1);
-                    bool snapshotHeld = !(bool)hasCategory.Invoke(null, new object[] { bag, ItemClass.GetItem("ammo9mmBulletBall", false) });
-                    finalizer.Invoke(null, new object[] { null });
+                    foreach (var group in routing)
+                    {
+                        var bag = new Bag(10);
+                        var slots = bag.GetSlots();
+                        var seed = ItemClass.GetItem(group.Seed, false);
+                        if (seed == null) { Log.Out("[SimProbe] ROUTING " + group.Group + " seed missing " + group.Seed); fail++; continue; }
+                        slots[0] = new ItemStack(seed, 1);
+                        prefix.Invoke(null, new object[] { bag });
 
-                    if (bookRoutes) pass++; else { Log.Out("[SimProbe] CONTAINER representative book did not route its category"); fail++; }
-                    if (pistolRejected) pass++; else { Log.Out("[SimProbe] CONTAINER pistol wrongly routed into a book chest"); fail++; }
-                    if (snapshotHeld) pass++; else { Log.Out("[SimProbe] CONTAINER a mid-transfer item enabled its own category"); fail++; }
+                        var accepted = 0; var rejectedWrong = new List<string>();
+                        foreach (var name in group.Accept)
+                        {
+                            var item = ItemClass.GetItem(name, false);
+                            if (item != null && (bool)hasCategory.Invoke(null, new object[] { bag, item })) accepted++;
+                            else rejectedWrong.Add(name);
+                        }
+                        var acceptedWrong = new List<string>();
+                        foreach (var name in group.Reject)
+                        {
+                            var item = ItemClass.GetItem(name, false);
+                            if (item != null && (bool)hasCategory.Invoke(null, new object[] { bag, item })) acceptedWrong.Add(name);
+                        }
+                        finalizer.Invoke(null, new object[] { null });
+
+                        int total = group.Accept.Length + group.Reject.Length;
+                        if (rejectedWrong.Count == 0 && acceptedWrong.Count == 0) pass++;
+                        else
+                        {
+                            fail++;
+                            Log.Out("[SimProbe] ROUTING " + group.Group + " seed=" + group.Seed
+                                + " missed=" + string.Join(",", rejectedWrong) + " leaked=" + string.Join(",", acceptedWrong));
+                        }
+                    }
                 }
 
                 // Pathfinding, against real world geometry the server has loaded:
