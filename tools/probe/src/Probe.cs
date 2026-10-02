@@ -68,6 +68,30 @@ namespace SimProbe
                     .Any(m => m.DeclaringType?.Name == "StackSortUtil" && m.Name == "getGroup");
                 if (patched) pass++; else { Log.Out("[SimProbe] UNPATCHED StackSortUtil.getGroup"); fail++; }
 
+                // Container routing, with a real Bag and the mod's real StashItems decision:
+                // one representative item must route its whole category and nothing else, and
+                // a category added mid-transfer must not enable itself (snapshot semantics).
+                var stash = FindType("JonCategoryStorage.StashCategories");
+                if (stash != null)
+                {
+                    var bag = new Bag(8);
+                    var slots = bag.GetSlots();
+                    slots[0] = new ItemStack(ItemClass.GetItem("schematicMaster", false), 1);
+                    var prefix = stash.GetMethod("Prefix");
+                    var hasCategory = stash.GetMethod("HasCategory");
+                    var finalizer = stash.GetMethod("Finalizer");
+                    prefix.Invoke(null, new object[] { bag });
+                    bool bookRoutes = (bool)hasCategory.Invoke(null, new object[] { bag, ItemClass.GetItem("modGunBarrelExtenderSchematic", false) });
+                    bool pistolRejected = !(bool)hasCategory.Invoke(null, new object[] { bag, ItemClass.GetItem("gunHandgunT1Pistol", false) });
+                    slots[1] = new ItemStack(ItemClass.GetItem("gunHandgunT1Pistol", false), 1);
+                    bool snapshotHeld = !(bool)hasCategory.Invoke(null, new object[] { bag, ItemClass.GetItem("ammo9mmBulletBall", false) });
+                    finalizer.Invoke(null, new object[] { null });
+
+                    if (bookRoutes) pass++; else { Log.Out("[SimProbe] CONTAINER representative book did not route its category"); fail++; }
+                    if (pistolRejected) pass++; else { Log.Out("[SimProbe] CONTAINER pistol wrongly routed into a book chest"); fail++; }
+                    if (snapshotHeld) pass++; else { Log.Out("[SimProbe] CONTAINER a mid-transfer item enabled its own category"); fail++; }
+                }
+
                 Log.Out("[SimProbe] RESULT pass=" + pass + " fail=" + fail);
             }
             catch (Exception error)
