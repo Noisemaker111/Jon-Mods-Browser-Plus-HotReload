@@ -38,8 +38,12 @@ if ($LASTEXITCODE -ne 0) { throw 'Offline window preview failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Individual gameplay verification failed' }
 & python -B -m unittest discover -s (Join-Path $repo 'lab') -p test_server.py
 if ($LASTEXITCODE -ne 0) { throw 'Browser lab backend checks failed' }
+& python -B -m unittest discover -s (Join-Path $repo 'lab') -p test_studio.py
+if ($LASTEXITCODE -ne 0) { throw 'Native UI editor round-trip checks failed' }
 & node --check (Join-Path $repo 'lab/static/app.js')
 if ($LASTEXITCODE -ne 0) { throw 'Browser lab JavaScript syntax check failed' }
+& node --check (Join-Path $repo 'lab/static/studio-editor.js')
+if ($LASTEXITCODE -ne 0) { throw 'UI editor JavaScript syntax check failed' }
 & node (Join-Path $repo 'lab/test-model.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Browser lab coordinate/replay checks failed' }
 Write-Output 'PASS browser lab job reruns, isolation, local API protection, telemetry retention and drawing persistence'

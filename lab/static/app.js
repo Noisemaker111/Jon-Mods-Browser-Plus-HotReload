@@ -1,4 +1,5 @@
 import {screenPoint, worldPoint, latestAt, fitPoints} from './model.mjs';
+import {initStudio} from './studio-editor.js';
 
 const $ = selector => document.querySelector(selector);
 const all = selector => [...document.querySelectorAll(selector)];
@@ -24,13 +25,14 @@ async function api(path, data, retry = true) {
 
 // Navigation and theme share the same components across all workspaces.
 function navigate(tab) {
-  if (!['tests', 'ui', 'map', 'board'].includes(tab)) tab = 'tests';
+  if (!['tests', 'ui', 'assets', 'map', 'board'].includes(tab)) tab = 'tests';
   all('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   all('.page').forEach(p => p.classList.toggle('active', p.id === tab));
-  $('#page-title').textContent = {tests: 'Test bench', ui: 'UI studio', map: 'World & paths', board: 'Design board'}[tab];
+  $('#page-title').textContent = {tests: 'Test bench', ui: 'UI studio', assets: 'Asset library', map: 'World & paths', board: 'Design board'}[tab];
   $('#page-description').textContent = {
     tests: 'Build with confidence. Test your mods against the real game.',
-    ui: 'Design in the browser. Preview your XML without launching the game.',
+    ui: 'Real game assets. Editable layers. Changes saved to your mod’s XML.',
+    assets: 'Browse the actual sprites, textures, fonts, items and POI images from your game install.',
     map: 'Replay a follow run, inspect the planner, and see where it went wrong.',
     board: 'A clean canvas for designs, diagrams, and better test setups.',
   }[tab];
@@ -90,7 +92,7 @@ async function refreshJobs() {
   state.jobs = await api('/api/jobs');
   if ($('#error').dataset.kind === 'network') $('#error').hidden = true;
   const active = state.jobs.find(j => j.status === 'running'); state.active = active?.id || null;
-  all('[data-job], #render-preview').forEach(b => b.disabled = !!active);
+  all('[data-job], [data-source-save]').forEach(b => b.disabled = !!active);
   const history = $('#history'); history.replaceChildren();
   $('#run-count').textContent = `${state.jobs.length} runs`;
   if (!state.jobs.length) history.append(node('p', 'muted small', 'No runs yet. Nothing is marked passed until a check actually runs.'));
@@ -100,24 +102,8 @@ async function refreshJobs() {
     button.append(node('span', `badge ${job.status}`, job.status), node('strong', '', jobTitle(job)), node('small', '', new Date(job.started * 1000).toLocaleString()));
     button.onclick = () => { state.selected = job.id; displayResult(job); all('#history button').forEach(b => b.classList.remove('selected')); button.classList.add('selected'); };
     history.append(button);
-    if (job.kind === 'preview' && job.status !== 'running' && !state.previewHandled.has(job.id)) {
-      state.previewHandled.add(job.id);
-      // Only update the studio from the newest preview; old history must not overwrite it.
-      if (job.id === state.jobs.find(j => j.kind === 'preview')?.id) {
-        $('#preview-log').textContent = job.output;
-        if (job.artifact) {
-          $('#preview-image').src = job.artifact; $('#preview-image').hidden = false; $('#preview-empty').hidden = true;
-          $('#preview-download').href = job.artifact; $('#preview-download').hidden = false;
-        }
-      }
-    }
   }
-  if (active?.kind === 'preview') $('#preview-log').textContent = active.output || 'Rendering…';
   displayResult(state.jobs.find(j => j.id === state.selected));
-}
-async function renderPreview() {
-  await startJob('preview', {target: $('#preview-target').value, state: $('#preview-state').value,
-    values: {name: $('#preview-name').value, distance: $('#preview-distance').value}});
 }
 const scenarioQueries = ['hr doctor', 'pois', 'gettime', 'getgamestats', 'listplayers', 'version'];
 function addScenarioStep(spec = {tel: 'hr doctor', pattern: 'doctor: \\d+ pass, 0 fail'}) {
@@ -133,7 +119,6 @@ function persistScenario() { localStorage.setItem('lab-scenario', JSON.stringify
 $('#scenario-add').onclick = () => { if (all('.scenario-step').length < 20) { addScenarioStep(); persistScenario(); } };
 $('#scenario-name').oninput = persistScenario;
 $('#scenario-run').onclick = action(() => startJob('scenario', scenarioParams()));
-$('#render-preview').onclick = action(renderPreview);
 async function loadGallery() { state.artifacts = await api('/api/previews'); filterGallery(); }
 function filterGallery() {
   const filter = $('#artifact-filter').value.toLowerCase(); $('#gallery').replaceChildren();
@@ -401,10 +386,10 @@ async function init() {
     if (refreshing) return; refreshing = true;
     try {
       await refreshJobs(); ticks++;
-      if (ticks % 3 === 0 && $('#auto-preview').checked && $('#ui').classList.contains('active') && !state.active) await renderPreview();
     } catch (error) { fail(error); } finally { refreshing = false; }
   }, 1000);
   window.addEventListener('focus', () => refreshJobs().catch(fail));
+  await initStudio({api, startJob, fail, loadGallery});
   const worlds = await api('/api/worlds'); $('#world').replaceChildren(...worlds.map(w => new Option(w.name, w.name)));
   if (worlds.length) { $('#world').value = worlds.some(w => w.name === 'Navezgane') ? 'Navezgane' : worlds[0].name; await loadWorld(); }
   board.shapes = (await api('/api/drawings/design-board')).shapes || [];

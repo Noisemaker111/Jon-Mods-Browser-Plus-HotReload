@@ -50,6 +50,16 @@ class WorkspaceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             server.drawing_path("../secret")
         self.assertEqual(server.safe_child(self.home, "valid.png"), self.home / "valid.png")
+        evidence = server.workspace() / "studio/renders/visible.png"
+        evidence.parent.mkdir(parents=True)
+        evidence.write_bytes(b"fixture")
+        for relative in ("weblab/assets/texture.png", "archive/build/Icon.png"):
+            path = self.home / relative
+            path.parent.mkdir(parents=True)
+            path.write_bytes(b"fixture")
+        with patch.object(server, "scratch", return_value=self.home) as resolve:
+            self.assertEqual([p["name"] for p in server.previews()], ["visible.png"])
+            self.assertEqual(resolve.call_count, 1)
 
     def test_jobs_stream_finish_and_can_run_again(self):
         def command(kind, params, job_id):
@@ -115,6 +125,15 @@ class WorkspaceTests(unittest.TestCase):
             with urlopen(request) as result:
                 saved = json.load(result)
             self.assertTrue((self.home / saved["path"]).exists())
+            font = server.workspace() / "assets/native.ttf"
+            font.parent.mkdir(parents=True, exist_ok=True)
+            font.write_bytes(b"native-font-fixture")
+            server.atomic_json(font.parent / "index.json", {"assets": [{"id": "fontfixture", "file": str(font)}]})
+            with urlopen(base + "/api/assets/file/fontfixture") as result:
+                self.assertEqual(result.headers["Content-Type"], "font/ttf")
+            with self.assertRaises(HTTPError) as error:
+                urlopen(base + "/api/assets/file/not-indexed")
+            self.assertEqual(error.exception.code, 404)
             request = Request(base + "/api/jobs", headers={"Host": "evil.example"})
             with self.assertRaises(HTTPError) as error:
                 urlopen(request)

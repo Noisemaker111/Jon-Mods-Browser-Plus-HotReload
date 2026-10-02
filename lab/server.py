@@ -15,10 +15,14 @@ import threading
 import time
 import uuid
 import webbrowser
+from functools import lru_cache
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlencode, urlparse
 from xml.etree import ElementTree as ET
+
+import assets as game_assets
+import studio
 
 GAME = Path(os.environ.get("LAB_GAME", r"C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die"))
 HERE = Path(__file__).resolve().parent
@@ -44,6 +48,7 @@ PREVIEW_TARGETS = {
 }
 
 
+@lru_cache(maxsize=1)
 def scratch():
     common = subprocess.check_output(
         ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip()
@@ -130,6 +135,9 @@ def command_for(kind, params, job_id):
         command = [sys.executable, "-u", str(ROOT / "tools" / "xui-preview.py"), target["flag"], target["target"],
                    "--state", state, "--values", str(value_path), "--out", str(out), "--size", "2"]
         return command, 60, out
+    if kind == "assets":
+        return [sys.executable, "-B", "-u", str(HERE / "assets.py"), "--game", str(GAME),
+                "--cache", str(workspace() / "assets"), "--scratch", str(scratch())], 300, None
     raise ValueError("Unknown test suite")
 
 
@@ -226,10 +234,24 @@ def validate_scenario(data):
 
 
 def previews():
-    paths = sorted(scratch().rglob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
-    return [{"name": p.name, "path": str(p.relative_to(scratch())),
-             "url": "/file?" + urlencode({"path": str(p.relative_to(scratch()))}),
-             "modified": p.stat().st_mtime} for p in paths[:300]]
+    home = scratch()
+    paths = list(home.glob("*.png")) + list((home / "ingame/run").glob("*.png"))
+    # Evidence is not every texture from every old staged mod/game copy. Prune
+    # extracted assets before walking, and never crawl archived builds/saves.
+    for base in (home / "weblab", home / "ingame/shots"):
+        if not base.exists():
+            continue
+        for folder, dirs, files in os.walk(base):
+            dirs[:] = [d for d in dirs if d not in ("assets", "backups", "drafts", "proposed") and not (Path(folder) / d).is_symlink()]
+            paths.extend(Path(folder) / name for name in files if Path(name).suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"))
+    records = []
+    for path in set(paths):
+        try:
+            relative = str(path.relative_to(home))
+            records.append({"name": path.name, "path": relative, "url": "/file?" + urlencode({"path": relative}), "modified": path.stat().st_mtime})
+        except FileNotFoundError:
+            continue  # a temporary test/export was removed while enumerating
+    return sorted(records, key=lambda item: item["modified"], reverse=True)[:300]
 
 
 def world(name):
@@ -327,6 +349,14 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def reply(self, code, body, content_type="application/json; charset=utf-8"):
+        try:
+            self.send_reply(code, body, content_type)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Reloading/closing a browser tab can cancel asset and large telemetry
+            # requests. Do not try to send a second error to that closed socket.
+            pass
+
+    def send_reply(self, code, body, content_type):
         data = body if isinstance(body, bytes) else json.dumps(body, allow_nan=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", content_type)
@@ -335,10 +365,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         self.end_headers()
-        try:
-            self.wfile.write(data)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        self.wfile.write(data)
 
     def trusted_host(self):
         return self.headers.get("Host") in (f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}")
@@ -372,6 +399,29 @@ class Handler(BaseHTTPRequestHandler):
                     return self.reply(200, snapshot(job))
             if route == "/api/previews":
                 return self.reply(200, previews())
+            if route == "/api/assets":
+                manifest = game_assets.load(workspace() / "assets")
+                return self.reply(200, {**manifest, "assets": [{k: v for k, v in a.items() if k != "file"} for a in manifest["assets"]]})
+            if route.startswith("/api/assets/file/"):
+                match = next((a for a in game_assets.load(workspace() / "assets")["assets"] if a["id"] == route[17:]), None)
+                if not match:
+                    raise FileNotFoundError("Asset not indexed")
+                return self.file(Path(match["file"]))
+            if route == "/api/studio/catalog":
+                return self.reply(200, {"scenes": studio.scene_catalog(GAME, ROOT),
+                                        "owners": [{"id": o["id"], "title": o["title"]} for o in studio.owners(ROOT)]})
+            if route == "/api/studio/scene":
+                return self.reply(200, studio.load_scene(GAME, ROOT, query.get("key", [""])[0]))
+            if route == "/api/studio/draft":
+                key = query.get("key", [""])[0]
+                studio.load_scene(GAME, ROOT, key)
+                path = workspace() / "studio/drafts" / (hashlib.sha256(key.encode()).hexdigest() + ".json")
+                return self.reply(200, json.loads(path.read_text(encoding="utf-8")) if path.exists() else None)
+            if route.startswith("/api/studio/exports/"):
+                name = route[20:]
+                if not re.fullmatch(r"studio-[a-f0-9]{12}\.xml", name):
+                    raise ValueError("Invalid export")
+                return self.reply(200, (workspace() / "studio/exports" / name).read_bytes(), "text/plain; charset=utf-8")
             if route == "/api/worlds":
                 return self.reply(200, worlds())
             if route.startswith("/api/world/"):
@@ -405,14 +455,58 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(403, {"error": "Use the local lab page to make changes"})
         try:
             length = int(self.headers.get("Content-Length", "0"))
-            if not 0 < length <= 1000000:
-                raise ValueError("Body must be between 1 byte and 1 MB")
+            limit = 16000000 if urlparse(self.path).path == "/api/assets/import" else 1000000
+            if not 0 < length <= limit:
+                raise ValueError("Request body exceeds this endpoint's limit")
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError("Expected a JSON object")
             route = unquote(urlparse(self.path).path)
             if route == "/api/jobs":
                 return self.reply(202, start_job(data.get("kind"), data.get("params")))
+            if route == "/api/assets/import":
+                with LOCK:
+                    if ACTIVE and JOBS[ACTIVE]["kind"] == "assets":
+                        raise RuntimeError("Wait for the asset reindex before importing a capture")
+                    return self.reply(201, game_assets.import_capture(workspace() / "assets", data))
+            if route == "/api/studio/render":
+                scene = studio.load_scene(GAME, ROOT, data.get("key"))
+                values = data.get("values", {})
+                if not isinstance(values, dict) or len(values) > 300:
+                    raise ValueError("Expected a small binding-value dictionary")
+                return self.reply(200, studio.layout(GAME, ROOT, scene, data.get("tree", scene["tree"]), values,
+                                                     game_assets.load(workspace() / "assets")["assets"]))
+            if route == "/api/studio/png":
+                scene = studio.load_scene(GAME, ROOT, data.get("key"))
+                assets = game_assets.load(workspace() / "assets")["assets"]
+                graph = studio.layout(GAME, ROOT, scene, data.get("tree", scene["tree"]), data.get("values", {}), assets)
+                image = studio.render_image(graph, assets)
+                path = workspace() / "studio/renders" / (uuid.uuid4().hex + ".png")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                image.save(path)
+                return self.reply(201, {"path": str(path.relative_to(scratch())),
+                                        "url": "/file?" + urlencode({"path": str(path.relative_to(scratch()))}), "warnings": graph["warnings"]})
+            if route == "/api/studio/save":
+                with LOCK:
+                    if ACTIVE:
+                        raise RuntimeError("Wait for the running check/build before changing mod source")
+                    return self.reply(200, studio.save_scene(GAME, ROOT, workspace(), data))
+            if route == "/api/studio/draft":
+                scene = studio.load_scene(GAME, ROOT, data.get("key"))
+                studio.validate_tree(data.get("tree"), scene["tree"])
+                path = workspace() / "studio/drafts" / (hashlib.sha256(scene["key"].encode()).hexdigest() + ".json")
+                with LOCK:
+                    atomic_json(path, data)
+                return self.reply(200, {"saved": True, "path": str(path.relative_to(scratch()))})
+            if route == "/api/studio/export":
+                scene = studio.load_scene(GAME, ROOT, data.get("key"))
+                element = studio.validate_tree(data.get("tree"), scene["tree"])
+                name = "studio-" + uuid.uuid4().hex[:12] + ".xml"
+                path = workspace() / "studio/exports" / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(studio.patch_xml(scene, element), encoding="utf-8")
+                return self.reply(201, {"saved": True, "path": str(path.relative_to(scratch())), "url": "/api/studio/exports/" + name,
+                                        "xml": path.read_text(encoding="utf-8")})
             if route == "/api/exports":
                 png = data.get("png", "")
                 if not isinstance(png, str) or not png.startswith("data:image/png;base64,"):
@@ -450,8 +544,8 @@ class Handler(BaseHTTPRequestHandler):
         if not path.is_file():
             raise FileNotFoundError("File not found")
         content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        if path.suffix == ".js":
-            content_type = "text/javascript"
+        content_type = {".js": "text/javascript", ".mjs": "text/javascript", ".ttf": "font/ttf",
+                        ".otf": "font/otf", ".woff": "font/woff", ".woff2": "font/woff2"}.get(path.suffix.lower(), content_type)
         return self.reply(200, path.read_bytes(), content_type)
 
 

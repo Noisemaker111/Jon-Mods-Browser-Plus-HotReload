@@ -39,6 +39,7 @@
     <nav aria-label="Workspace" class="mx-auto flex max-w-[1480px] gap-6 overflow-x-auto px-6 lg:gap-8 lg:px-10">
       <button data-tab="tests" class="tab active"><svg class="icon"><use href="#icon-test"/></svg>Test bench</button>
       <button data-tab="ui" class="tab"><svg class="icon"><use href="#icon-ui"/></svg>UI studio</button>
+      <button data-tab="assets" class="tab"><svg class="icon"><use href="#icon-layers"/></svg>Asset library</button>
       <button data-tab="map" class="tab"><svg class="icon"><use href="#icon-map"/></svg>World & paths</button>
       <button data-tab="board" class="tab"><svg class="icon"><use href="#icon-pen"/></svg>Design board</button>
     </nav>
@@ -80,25 +81,60 @@
 
     <!-- UI STUDIO -->
     <section id="ui" class="page">
-      <div class="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <div class="panel grid gap-5 p-5">
-          <h2 class="text-sm">Preview settings</h2>
-          <label>Panel<select id="preview-target"><option value="party">Party portrait</option><option value="menu">Main menu / MODS button</option></select></label>
-          <label>Player state<select id="preview-state"><option value="healthy">Healthy</option><option value="low">Low health</option><option value="dead">Dead</option><option value="muted">Muted</option><option value="far">Far away</option></select></label>
-          <label>Display name<input id="preview-name" value="NoisemakerJon" maxlength="80"></label>
-          <label>Distance<input id="preview-distance" value="128m" maxlength="30"></label>
-          <button id="render-preview" class="primary">Render preview <svg class="icon"><use href="#icon-arrow"/></svg></button>
-          <label class="check-label"><input id="auto-preview" type="checkbox">Auto-refresh every 3 seconds</label>
-          <p class="text-[11px] leading-relaxed text-muted">Uses your current source XML. Atlas icons are placeholders, not pixel-exact textures. No mod files are changed.</p>
-          <details><summary>Render details</summary><pre id="preview-log">Choose a panel and render.</pre></details>
-        </div>
-        <div class="panel p-5 lg:p-6">
-          <div class="panel-heading"><h2>Preview canvas</h2><a id="preview-download" class="quiet" hidden download>Open image ↗</a></div>
-          <div class="preview-stage"><img id="preview-image" alt="Rendered UI preview" hidden><p id="preview-empty" class="text-sm text-muted">Your panel will appear here.</p></div>
-          <p class="mt-4 text-[11px] text-muted">Layout preview · actual game XML + your patches · 2× render</p>
-        </div>
+      <div class="panel mb-4 flex flex-wrap items-end gap-3 p-4">
+        <label class="w-44">Find a scene<input id="studio-scene-search" placeholder="Party, inventory, HUD…"></label>
+        <label class="min-w-56 flex-1">Game template / window<select id="studio-scene"></select></label>
+        <label class="w-40">Save destination<select id="studio-owner"></select></label>
+        <button id="studio-reload" class="quiet">Reload source</button>
+        <button id="studio-save" class="primary" data-source-save>Save to mod XML</button>
       </div>
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <span id="studio-source" class="font-mono text-[10px] text-muted">Loading native scene…</span>
+        <span id="studio-status" class="badge">Loading</span>
+      </div>
+      <div class="grid items-start gap-4 xl:grid-cols-[205px_minmax(0,1fr)_255px]">
+        <aside class="panel p-4">
+          <div class="panel-heading"><h2>Layers</h2><span id="studio-layer-count" class="text-[10px] text-muted"></span></div>
+          <input id="studio-layer-search" class="mb-3 w-full" placeholder="Find a layer…" aria-label="Find a layer">
+          <div id="studio-layers" class="studio-layers"></div>
+          <hr>
+          <label>Add control<select id="studio-add-type"><option value="label">Label</option><option value="sprite">Sprite / icon</option><option value="rect">Container</option><option value="texture">Texture</option><option value="grid">Grid</option></select></label>
+          <button id="studio-add" class="quiet mt-3 w-full">+ Add layer</button>
+          <div class="toolbar mt-3"><button id="studio-duplicate" class="quiet">Duplicate</button><button id="studio-delete" class="quiet">Delete</button></div>
+        </aside>
+        <div class="panel overflow-hidden">
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3">
+            <div class="toolbar"><button id="studio-undo" class="quiet" aria-label="Undo edit">Undo</button><button id="studio-redo" class="quiet" aria-label="Redo edit">Redo</button><button id="studio-fit" class="quiet">Fit</button><button id="studio-zoom-out" class="quiet" aria-label="Zoom out">−</button><span id="studio-zoom-label" class="w-10 text-center font-mono text-[10px] text-muted">100%</span><button id="studio-zoom-in" class="quiet" aria-label="Zoom in">+</button></div>
+            <label class="check-label"><input id="studio-outlines" type="checkbox" checked>Selection bounds</label>
+          </div>
+          <canvas id="studio-canvas" class="h-[480px] w-full touch-none" tabindex="0" aria-label="Editable game UI. Click a control to select it, drag to move, use the corner handle to resize, or arrow keys to nudge."></canvas>
+          <div class="flex flex-wrap items-center justify-between gap-2 border-t border-border p-3"><span id="studio-render-info" class="text-[10px] text-muted">Native atlas sprites · native game font</span><div class="toolbar"><button id="studio-png" class="quiet">Export PNG</button><button id="studio-export" class="quiet">Export XML patch</button></div></div>
+          <div id="studio-warnings" class="border-t border-border p-3 text-[10px] leading-relaxed text-muted" hidden></div>
+        </div>
+        <aside class="panel p-4">
+          <div class="panel-heading"><h2>Inspector</h2><span id="studio-selected-type" class="badge">Select a layer</span></div>
+          <div id="studio-inspector" class="grid gap-3"><p class="text-xs text-muted">Select a control in the canvas or layer list.</p></div>
+          <hr><h2 class="mb-3 text-sm">Preview state</h2>
+          <label class="mb-3">Player state<select id="studio-state"><option value="healthy">Healthy</option><option value="low">Low health</option><option value="dead">Dead</option><option value="muted">Muted</option><option value="far">Far away</option></select></label>
+          <label class="mb-3">Name<input id="studio-player-name" value="NoisemakerJon" maxlength="80"></label>
+          <label class="mb-3">Distance<input id="studio-distance" value="128m" maxlength="30"></label>
+          <details><summary>All binding values (JSON)</summary><textarea id="studio-values" class="studio-code mt-3" rows="8" aria-label="All preview binding values"></textarea><button id="studio-apply-values" class="quiet mt-2">Apply bindings</button></details>
+        </aside>
+      </div>
+      <div class="panel mt-4 p-4"><details><summary>Generated game patch & save details</summary><p id="studio-save-info" class="my-3 text-xs leading-relaxed text-muted">Edits are automatically saved as a private draft. Save to mod XML writes an actual source patch with a backup and conflict protection; nothing is installed into your normal game.</p><pre id="studio-xml"></pre></details></div>
       <div class="panel mt-6 p-5 lg:p-6"><div class="panel-heading"><h2>Evidence library</h2><div class="toolbar"><input id="artifact-filter" placeholder="Search images…" aria-label="Filter images"><button id="refresh-gallery" class="quiet">Refresh</button></div></div><div id="gallery" class="gallery"></div></div>
+    </section>
+
+    <!-- NATIVE ASSET LIBRARY -->
+    <section id="assets" class="page">
+      <div class="panel mb-5 flex flex-wrap items-end gap-3 p-4">
+        <label class="min-w-56 flex-1">Search installed game assets<input id="asset-search" placeholder="Quest, health, wood, backpack…"></label>
+        <label class="w-44">Type<select id="asset-kind"><option value="sprite">UI sprites</option><option value="item">Item icons</option><option value="texture">Textures</option><option value="font">Fonts</option><option value="prefab">POI previews</option><option value="capture">Runtime captures</option><option value="">Everything</option></select></label>
+        <button id="asset-import" class="quiet">Import runtime capture</button><button id="asset-refresh" class="quiet">Refresh library</button><button id="asset-rebuild" class="primary" data-job="assets">Reindex game assets</button>
+      </div>
+      <div class="mb-4 flex flex-wrap justify-between gap-2"><p id="asset-summary" class="text-xs text-muted">Reading local cache…</p><span class="text-[10px] text-muted">Extracted from your installed game. Local use only.</span></div>
+      <div id="asset-grid" class="asset-grid"></div>
+      <div class="toolbar mt-5 justify-center"><button id="asset-prev" class="quiet">Previous</button><span id="asset-page" class="text-xs text-muted"></span><button id="asset-next" class="quiet">Next</button></div>
     </section>
 
     <!-- WORLD & PATHS -->
@@ -145,5 +181,8 @@
   </main>
 
   <dialog id="lightbox"><div class="panel-heading"><strong id="lightbox-title" class="text-sm font-medium"></strong><button id="close-lightbox" class="quiet">Close ✕</button></div><img id="lightbox-image" alt="Selected evidence image"></dialog>
+  <dialog id="asset-detail" class="w-[650px]"><div class="panel-heading"><h2 id="asset-detail-title">Asset</h2><button id="asset-detail-close" class="quiet">Close ✕</button></div><div id="asset-detail-preview" class="asset-detail-preview"></div><pre id="asset-detail-meta"></pre><div class="toolbar mt-4"><button id="asset-use" class="primary">Use in selected layer</button><a id="asset-detail-open" class="quiet" target="_blank" rel="noopener">Open native file ↗</a></div></dialog>
+  <dialog id="asset-picker" class="w-[900px]"><div class="panel-heading"><h2>Choose a real game asset</h2><button id="asset-picker-close" class="quiet">Close ✕</button></div><input id="asset-picker-search" class="mb-4 w-full" placeholder="Search icons or textures…" aria-label="Search asset picker"><div id="asset-picker-grid" class="asset-grid"></div><div class="toolbar mt-4 justify-center"><button id="asset-picker-prev" class="quiet">Previous</button><span id="asset-picker-page" class="text-xs text-muted"></span><button id="asset-picker-next" class="quiet">Next</button></div></dialog>
+  <dialog id="capture-import" class="w-[850px]"><div class="panel-heading"><h2>Capture a runtime texture sample</h2><button id="capture-close" class="quiet">Close ✕</button></div><p class="mb-4 text-xs leading-relaxed text-muted">Use a real screenshot for portraits or other generated textures. Drag over the image to crop. This is an offline preview sample, not a replacement for the game's live render.</p><div class="grid gap-3 sm:grid-cols-2"><label>Screenshot<input id="capture-file" type="file" accept="image/png,image/jpeg,image/webp"></label><label>Sample name<input id="capture-name" value="My player portrait" maxlength="100"></label></div><canvas id="capture-canvas" class="mt-4 h-72 w-full touch-none rounded-lg bg-stage" aria-label="Drag to choose screenshot crop"></canvas><div class="mt-4 grid grid-cols-4 gap-3"><label>X<input id="capture-x" type="number" min="0" value="0"></label><label>Y<input id="capture-y" type="number" min="0" value="0"></label><label>Width<input id="capture-w" type="number" min="1" value="68"></label><label>Height<input id="capture-h" type="number" min="1" value="68"></label></div><div class="toolbar mt-4"><button id="capture-save" class="primary">Save preview sample</button><span class="text-[10px] text-muted">Saved locally; never installed into your game.</span></div></dialog>
 </body>
 </html>
