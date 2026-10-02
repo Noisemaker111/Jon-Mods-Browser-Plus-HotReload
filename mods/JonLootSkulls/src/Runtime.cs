@@ -67,19 +67,49 @@ namespace JonLootSkulls
             Vector3i position = container.ToWorldPos();
             string key = position.x + "," + position.y + "," + position.z;
             bool playerPlaced = container is TEFeatureStorage storage && storage.Parent.PlayerPlaced;
-            if (container.bPlayerStorage || playerPlaced || !container.bTouched || !container.IsEmpty())
+            // Only containers that belong to a POI building count; a nest or
+            // trash pile out in the open never gets a marker.
+            var poi = GameManager.Instance.World.GetPOIAtPosition(position.ToVector3(), null, null);
+            if (poi != null) Changed(poi.id);
+            if (poi == null || container.bPlayerStorage || playerPlaced || !container.bTouched)
             {
                 if (Loot.Records.Remove(key)) SaveLoot();
                 return;
             }
             int touched = GameUtils.WorldTimeToTotalHours(container.worldTimeTouched);
-            if (Loot.Records.TryGetValue(key, out var old) && old.TouchedHours == touched) return;
-            var poi = GameManager.Instance.World.GetPOIAtPosition(position.ToVector3(), null, null);
-            Vector3 anchor = position.ToVector3() + new Vector3(0.5f,2,0.5f);
-            if (poi != null) anchor = poi.boundingBoxPosition.ToVector3() + new Vector3(poi.boundingBoxSize.x / 2f, poi.boundingBoxSize.y + 3, poi.boundingBoxSize.z / 2f);
-            Loot.Records[key] = new LootRecord { Key=key, X=position.x,Y=position.y,Z=position.z, PoiId=poi == null ? -1 : poi.id,
+            if (Loot.Records.TryGetValue(key, out var old) && old.TouchedHours == touched && old.PoiId == poi.id) return;
+            Vector3 anchor = poi.boundingBoxPosition.ToVector3() + new Vector3(poi.boundingBoxSize.x / 2f, poi.boundingBoxSize.y + 3, poi.boundingBoxSize.z / 2f);
+            Loot.Records[key] = new LootRecord { Key=key, X=position.x,Y=position.y,Z=position.z, PoiId=poi.id,
                 AnchorX=anchor.x, AnchorY=anchor.y, AnchorZ=anchor.z, TouchedHours=touched };
             SaveLoot();
+        }
+
+        // Per POI: how many natural containers it holds, recounted only after
+        // a container in it changes or loads.
+        sealed class PoiCount { public int Total; public bool Stale = true; }
+        readonly Dictionary<int, PoiCount> counts = new Dictionary<int, PoiCount>();
+        void Changed(int poiId) { if (!counts.TryGetValue(poiId, out var c)) counts[poiId] = c = new PoiCount(); c.Stale = true; }
+        int Total(PrefabInstance poi)
+        {
+            if (!counts.TryGetValue(poi.id, out var c)) counts[poi.id] = c = new PoiCount();
+            if (!c.Stale) return c.Total;
+            c.Stale = false;
+            var world = GameManager.Instance.World;
+            Vector3i min = poi.boundingBoxPosition, max = min + poi.boundingBoxSize;
+            int total = 0;
+            foreach (var chunk in world.ChunkCache.GetChunkArrayCopySync())
+            {
+                var origin = chunk.GetWorldPos();
+                if (origin.x + 16 < min.x || origin.x > max.x || origin.z + 16 < min.z || origin.z > max.z) continue;
+                foreach (var te in chunk.GetTileEntities().list)
+                {
+                    if (!te.TryGetSelfOrFeature<ITileEntityLootable>(out var loot) || loot.bPlayerStorage) continue;
+                    if (loot is TEFeatureStorage storage && (storage.Parent == null || storage.Parent.PlayerPlaced)) continue;
+                    var at = te.ToWorldPos();
+                    if (at.x >= min.x && at.x < max.x && at.y >= min.y && at.y < max.y && at.z >= min.z && at.z < max.z) total++;
+                }
+            }
+            return c.Total = Math.Max(c.Total, total);
         }
         static Texture2D MakeSkull()
         {
@@ -99,30 +129,48 @@ namespace JonLootSkulls
         void OnGUI()
         {
             var player = GameManager.Instance?.World?.GetPrimaryPlayer();
-            if (player == null || player.IsDead()) return;
-            if (Event.current.type == EventType.Repaint && player.playerCamera != null)
+            if (player == null || player.IsDead() || Event.current.type != EventType.Repaint || player.playerCamera == null) return;
+            var world = GameManager.Instance.World;
+            var decorator = GameManager.Instance.GetDynamicPrefabDecorator();
+            if (decorator == null) return;
+            int now = GameUtils.WorldTimeToTotalHours(world.GetWorldTime());
+            int days = GamePrefs.GetInt(EnumGamePrefs.LootRespawnDays);
+            var searched = new Dictionary<int, int>();
+            var respawn = new Dictionary<int, int>();
+            foreach (var record in Loot.Records.Values)
             {
-                int now = GameUtils.WorldTimeToTotalHours(GameManager.Instance.World.GetWorldTime());
-                int days = GamePrefs.GetInt(EnumGamePrefs.LootRespawnDays);
-                var places = new Dictionary<string,LootRecord>();
-                foreach (var record in Loot.Records.Values)
-                {
-                    if (Rules.RespawnDue(record.TouchedHours, now, days)) continue;
-                    string place = record.PoiId < 0 ? record.Key : "poi:" + record.PoiId;
-                    if (!places.TryGetValue(place, out var prior) || prior.TouchedHours < record.TouchedHours) places[place] = record;
-                }
-                foreach (var record in places.Values)
-                {
-                    var anchor = new Vector3(record.AnchorX, record.AnchorY, record.AnchorZ);
-                    if (Vector3.Distance(anchor, player.position) > 500) continue;
-                    var screen = player.playerCamera.WorldToScreenPoint(anchor - Origin.position);
-                    if (screen.z <= 0) continue;
-                    var bounds = new Rect(screen.x - 15, Screen.height - screen.y - 36, 30,36);
-                    GUI.DrawTexture(bounds, skull);
-                    int hours = Math.Max(0, record.TouchedHours + days * 24 - now);
-                    GUI.Label(new Rect(bounds.x-70,bounds.y+35,170,25), days <= 0 ? "Looted · no respawn" : "Looted · " + hours + " game hours");
-                }
+                if (record.PoiId < 0 || Rules.RespawnDue(record.TouchedHours, now, days)) continue;
+                searched[record.PoiId] = (searched.TryGetValue(record.PoiId, out int n) ? n : 0) + 1;
+                int left = record.TouchedHours + days * 24 - now;
+                if (!respawn.TryGetValue(record.PoiId, out int first) || left < first) respawn[record.PoiId] = left;
             }
+            foreach (var pair in searched)
+            {
+                var poi = decorator.GetPrefab(pair.Key);
+                if (poi == null) continue;
+                var anchor = poi.boundingBoxPosition.ToVector3() + new Vector3(poi.boundingBoxSize.x / 2f, poi.boundingBoxSize.y + 3, poi.boundingBoxSize.z / 2f);
+                if (Vector3.Distance(anchor, player.position) > 500) continue;
+                var screen = player.playerCamera.WorldToScreenPoint(anchor - Origin.position);
+                if (screen.z <= 0) continue;
+                int total = Math.Max(Total(poi), pair.Value);
+                int percent = Mathf.RoundToInt(100f * pair.Value / total);
+                int zombies = 0;
+                Vector3 min = poi.boundingBoxPosition.ToVector3(), max = min + poi.boundingBoxSize.ToVector3();
+                foreach (var entity in world.Entities.list)
+                    if (entity is EntityEnemy enemy && !enemy.IsDead() && enemy.position.x >= min.x && enemy.position.x < max.x && enemy.position.z >= min.z && enemy.position.z < max.z && enemy.position.y >= min.y - 2 && enemy.position.y < max.y) zombies++;
+                var bounds = new Rect(screen.x - 15, Screen.height - screen.y - 36, 30, 36);
+                GUI.DrawTexture(bounds, skull);
+                string state = percent >= 100 ? "Looted" : percent + "% looted";
+                string timer = days <= 0 ? "no respawn" : "respawns in " + Math.Max(0, respawn[pair.Key]) + " h";
+                Label(new Rect(bounds.x - 95, bounds.y + 36, 220, 22), state + " · " + pair.Value + "/" + total + " containers");
+                Label(new Rect(bounds.x - 95, bounds.y + 56, 220, 22), timer + (zombies > 0 ? " · " + zombies + " zombie" + (zombies == 1 ? "" : "s") : ""));
+            }
+        }
+        static GUIStyle style;
+        static void Label(Rect at, string text)
+        {
+            if (style == null) style = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            var color = GUI.color; GUI.color = Color.black; GUI.Label(new Rect(at.x + 1, at.y + 1, at.width, at.height), text, style); GUI.color = color; GUI.Label(at, text, style);
         }
     }
     [HarmonyPatch(typeof(EntityPlayerLocal),"OnAddedToWorld")]

@@ -50,36 +50,49 @@ namespace JonGroundPings
             if (active.Count == 0) return;
             if (!meshAttempted) { meshAttempted = true; MakeMesh(); }
             if (material == null) return;
+            var eye = player.playerCamera.transform.position;
             foreach (var ping in active.Values)
             {
                 float age = Time.unscaledTime - ping.Started;
                 var m = ping.Message;
-                var normal = new Vector3(m.NX, m.NY, m.NZ).normalized;
-                if (normal.y < 0.3f) normal = Vector3.up;
-                var position = new Vector3(m.X, m.Y, m.Z) - Origin.position + normal * 0.04f;
-                var rotation = Quaternion.FromToRotation(Vector3.up, normal) * Quaternion.Euler(0, m.Heading, 0);
-                // Each teammate has one current ping. Six real seconds, with a
-                // two-second fade, independent of the game-time speed setting.
-                material.color = new Color(0.25f, 0.9f, 1, TeamProtocol.PingAlpha(age));
-                if (material.SetPass(0)) Graphics.DrawMeshNow(arrows, Matrix4x4.TRS(position, rotation, Vector3.one * TeamProtocol.PingScale(age)));
+                var spot = new Vector3(m.X, m.Y, m.Z) - Origin.position;
+                // Three chevrons stand over the spot pointing down at it,
+                // turned to face the viewer and sized by distance, so a ping
+                // reads at 5 m or 80 m and through grass. Each teammate has
+                // one current ping: six real seconds, fading over the last two.
+                var toEye = eye - spot; toEye.y = 0;
+                var facing = toEye.sqrMagnitude > 0.001f ? Quaternion.LookRotation(-toEye.normalized) : Quaternion.identity;
+                float size = Mathf.Max(1f, Vector3.Distance(eye, spot) * 0.045f) * TeamProtocol.PingScale(age);
+                float alpha = TeamProtocol.PingAlpha(age);
+                for (int i = 0; i < 3; i++)
+                {
+                    // Cascading pulse from the top chevron down to the spot.
+                    float wave = 0.55f + 0.45f * Mathf.Sin((age * 3f - i * 0.35f) * Mathf.PI * 2f);
+                    material.color = new Color(0.25f, 0.9f, 1, alpha * wave);
+                    var at = spot + Vector3.up * size * (0.25f + i * 0.55f);
+                    if (material.SetPass(0)) Graphics.DrawMeshNow(arrows, Matrix4x4.TRS(at, facing, Vector3.one * size));
+                }
             }
         }
         void MakeMesh()
         {
-            var shader = Shader.Find("Sprites/Default");
+            // The built-in colored shader takes a depth-test setting; Always
+            // keeps the marker visible over terrain, grass and props.
+            var shader = Shader.Find("Hidden/Internal-Colored");
             if (shader == null) { Log.Warning("[JonGroundPings] Ground ping shader unavailable."); return; }
-            material = new Material(shader) { mainTexture = Texture2D.whiteTexture };
+            material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+            material.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            material.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            material.SetInt("_Cull", (int)UnityEngine.Rendering.CullMode.Off);
+            material.SetInt("_ZWrite", 0);
+            material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+            // One downward chevron in the vertical XY plane, tip at the origin.
             var vertices = new List<Vector3>(); var triangles = new List<int>();
-            for (int i = 0; i < 3; i++)
-            {
-                float z = 0.8f - i * 0.65f;
-                AddQuad(vertices, triangles, new Vector3(-0.55f, 0, z-0.45f), new Vector3(-0.55f, 0, z-0.2f), new Vector3(0, 0, z+0.25f), new Vector3(0, 0, z));
-                AddQuad(vertices, triangles, new Vector3(0, 0, z), new Vector3(0, 0, z+0.25f), new Vector3(0.55f, 0, z-0.2f), new Vector3(0.55f, 0, z-0.45f));
-            }
-            arrows = new Mesh { name = "Jon team ground arrows" };
+            AddQuad(vertices, triangles, new Vector3(-0.5f, 0.5f, 0), new Vector3(-0.5f, 0.32f, 0), new Vector3(0, -0.18f, 0), new Vector3(0, 0, 0));
+            AddQuad(vertices, triangles, new Vector3(0, 0, 0), new Vector3(0, -0.18f, 0), new Vector3(0.5f, 0.32f, 0), new Vector3(0.5f, 0.5f, 0));
+            arrows = new Mesh { name = "Jon team ping chevron" };
             arrows.SetVertices(vertices); arrows.SetTriangles(triangles, 0);
             arrows.colors = Enumerable.Repeat(Color.white, vertices.Count).ToArray();
-            arrows.uv = Enumerable.Repeat(Vector2.zero, vertices.Count).ToArray();
             arrows.RecalculateBounds();
         }
         static void AddQuad(List<Vector3> v, List<int> t, Vector3 a, Vector3 b, Vector3 c, Vector3 d)

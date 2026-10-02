@@ -28,8 +28,8 @@ namespace JonSharedWaypoints
         bool Server => ConnectionManager.Instance != null && ConnectionManager.Instance.IsServer;
         void EnsureWorld()
         {
-            if (World == null || world == World.Guid) return;
-            Clear(); world = World.Guid;
+            if (World == null || world == TeamProtocol.WorldKey()) return;
+            Clear(); world = TeamProtocol.WorldKey();
         }
         public void OpenWorld() { closing = false; EnsureWorld(); PartyChanged(Local); }
         public void CloseWorld() { closing = true; Clear(); }

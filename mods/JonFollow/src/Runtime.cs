@@ -88,8 +88,8 @@ namespace JonFollow
             float away = Vector3.Distance(player.position, menuTarget.position);
             if (away > Rules.StartRange) GUI.Label(new Rect(menuBounds.x+12,menuBounds.y+33,210,24), "Get within " + Rules.StartRange + " m to follow (" + Mathf.RoundToInt(away) + " m)");
             else if (GUI.Button(new Rect(menuBounds.x+8,menuBounds.y+29,214,28),"Follow (on foot / vehicle)"))
-            { Follow.Start(menuTarget); menuTarget = null; }
-            else if (GUI.Button(new Rect(menuBounds.x+8,menuBounds.y+61,214,28),"Cancel")) menuTarget = null;
+            { Follow.Start(menuTarget); menuTarget = null; return; }
+            if (menuTarget != null && GUI.Button(new Rect(menuBounds.x+8,menuBounds.y+61,214,28),"Cancel")) menuTarget = null;
         }
     }
     [HarmonyPatch(typeof(XUiC_PartyEntry),"Init")]

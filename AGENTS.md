@@ -10,3 +10,14 @@ Scratch, build artifacts and verification evidence belong in the checkout home's
 Land verified changes on `beta`. Releases from beta are prereleases; stable promotion requires Jon's request.
 Never query another site's mod catalog without written permission. The catalog defaults to Jon's `7d2dmods.gg`.
 Verify with an isolated game user-data folder, EAC disabled for this code mod, and separate ports. Preserve Jon's saves and installed mods.
+
+## Layout and in-game lab
+
+Checkout home: `C:\Users\Jk101\Projects\7days2die-lab` (all 7 Days to Die mod work). `mods/` holds the
+six gameplay mods, `src/` the Mods browser + hot reload manager, `docs/JonAgent.md` the code-driven
+player plan. `.scratch/` holds `ingame/` (lab runtime: server and client user data, shots, telemetry),
+`archive/` (old experiments, download bundles, v6.2.0 release assets) and `reference/`.
+`python scripts/lab.py setup|start server|start A|join A|tel "<cmd>"|shot A out.png` runs the lab:
+an isolated dedicated server and two clients (LabA, LabB) on the Local platform, real input, no
+contact with Jon's own Mods or saves. Jon's game registry settings are backed up in
+`.scratch/ingame/backup/7dtd-registry-before.reg`; restore them when lab testing ends.

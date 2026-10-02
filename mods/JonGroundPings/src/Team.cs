@@ -36,11 +36,11 @@ namespace JonGroundPings
             {
                 if (World==null) return;
                 var m=TeamProtocol.Decode(bytes);
-                if (m.Kind!=TeamKind.Ping || m.World!=World.Guid) return;
+                if (m.Kind!=TeamKind.Ping || m.World!=TeamProtocol.WorldKey()) return;
                 var owner=World.GetEntity(m.Owner) as EntityPlayer;
                 if (Server)
                 {
-                    if (!TeamProtocol.Authorized(World.Guid,m.World,m.Owner,sender==null?-1:sender.entityId,
+                    if (!TeamProtocol.Authorized(TeamProtocol.WorldKey(),m.World,m.Owner,sender==null?-1:sender.entityId,
                         sender!=null && sender.loginDone && !sender.disconnecting,owner?.Party!=null && owner.Party.ContainsMember(owner.entityId))) return;
                     if (Vector3.Distance(new Vector3(m.X,m.Y,m.Z),owner.position)>500) return;
                     Broadcast(m,owner);
@@ -53,7 +53,7 @@ namespace JonGroundPings
         public void Ping(TeamMessage m)
         {
             if (Local==null || disposed || closing) return;
-            m.World=World.Guid; m.Owner=Local.entityId; runtime.Pings.Add(m);
+            m.World=TeamProtocol.WorldKey(); m.Owner=Local.entityId; runtime.Pings.Add(m);
             if (Local.Party==null) return;
             if (Server) Broadcast(m,Local); else subscription.Send(TeamProtocol.Encode(m),null);
         }

@@ -68,6 +68,10 @@ namespace JonSharedWaypoints
             }
         }
         static bool Finite(float x) { return !float.IsNaN(x) && !float.IsInfinity(x); }
+        // World.Guid is generated per process and a client's GameName is its own
+        // menu setting, so neither matches the dedicated server. The world name
+        // does; the owner and party checks are what authorize a message.
+        public static string WorldKey() { return GamePrefs.GetString(EnumGamePrefs.GameWorld); }
         public static bool Authorized(string currentWorld, string messageWorld, int claimedOwner, int authenticatedOwner, bool loggedIn, bool partyMember)
         { return loggedIn && partyMember && claimedOwner == authenticatedOwner && currentWorld == messageWorld; }
         public const float PingSeconds = 6;
