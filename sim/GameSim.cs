@@ -154,6 +154,52 @@ public static class GameSim
         var distinct = families.Select(n => (string)of.Invoke(null, new object[] { byName[n] })).Distinct().Count();
         Check(distinct == families.Length, families.Length + " item families never share a storage destination");
 
+        // 3b. A broad routing matrix: a box seeded with one representative accepts the
+        //     whole family (including sub-kinds that share a category) and rejects others.
+        var matrix = new (string Group, string Seed, string[] Accept, string[] Reject)[]
+        {
+            ("books", "bookFiremansAlmanacAxes",
+                new[] { "bookFiremansAlmanacHeat", "bookFiremansAlmanacSpeed", "skillBookMaster", "modGunBarrelExtenderSchematic", "schematicMaster" },
+                new[] { "ammo9mmBulletBall", "gunHandgunT1Pistol", "foodCanChili" }),
+            ("ammunition", "ammo9mmBulletBall",
+                new[] { "ammo44MagnumBulletBall", "ammoBundle9mmBulletBall" },
+                new[] { "bookFiremansAlmanacAxes", "medicalBandage" }),
+            ("medicine", "medicalFirstAidBandage",
+                new[] { "medicalFirstAidKit", "medicalAloeCream" },
+                new[] { "foodCanBeef", "ammo9mmBulletBall" }),
+            ("food", "foodCanChili",
+                new[] { "foodCanBeef", "foodCanChicken" },
+                new[] { "medicalBandage", "resourceWood" }),
+            ("item mods", "modGunBarrelExtender",
+                new[] { "modGunScopeSmall", "modGunFlashlight" },
+                new[] { "gunHandgunT1Pistol", "resourceWood" }),
+            ("tools", "meleeToolRepairT0StoneAxe",
+                new[] { "meleeToolAxeT1IronFireaxe" },
+                new[] { "gunHandgunT1Pistol", "resourceWood" }),
+            ("weapons", "gunHandgunT1Pistol",
+                new[] { "gunRifleT1HuntingRifle" },
+                new[] { "ammo9mmBulletBall", "armorLumberjackBoots" }),
+            ("armor", "armorLumberjackBoots",
+                new[] { "armorLumberjackHelmet", "armorLumberjackGloves" },
+                new[] { "gunHandgunT1Pistol", "resourceWood" }),
+            ("vehicles", "vehicleBicycleChassis",
+                new[] { "vehicleMinibikeChassis" },
+                new[] { "resourceWood", "gunHandgunT1Pistol" }),
+            ("resources", "resourceWood",
+                new[] { "resourceScrapIron", "resourceWoodBundle" },
+                new[] { "gunHandgunT1Pistol", "foodCanChili" }),
+        };
+        foreach (var row in matrix)
+        {
+            var seed = Resolve(row.Seed);
+            var seedCategory = seed == null ? null : (string)of.Invoke(null, new object[] { seed });
+            var missed = row.Accept.Where(n => Resolve(n) == null || (string)of.Invoke(null, new object[] { Resolve(n) }) != seedCategory).ToList();
+            var leaked = row.Reject.Where(n => Resolve(n) != null && (string)of.Invoke(null, new object[] { Resolve(n) }) == seedCategory).ToList();
+            Check(seed != null && missed.Count == 0 && leaked.Count == 0,
+                "one " + row.Group + " seed routes its family and rejects others"
+                + (missed.Count + leaked.Count == 0 ? "" : " (missed " + string.Join(",", missed) + "; leaked " + string.Join(",", leaked) + ")"));
+        }
+
         // 4. The real Harmony patch body, driven with real ItemStack objects.
         var sort = mod.GetType("JonCategoryStorage.SortCategory");
         if (sort != null)
