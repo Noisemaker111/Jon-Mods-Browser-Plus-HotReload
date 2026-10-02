@@ -6,6 +6,7 @@
     { "expect_clean": "server" },
     { "tel": "pathtest breakblocks" },
     { "tel": "pois" },
+    { "expect_console": { "tel": "hr doctor", "pattern": "doctor: \\d+ pass, 0 fail", "wait": 4.0 } },
     { "expect_log": { "who": "server", "pattern": "NullReferenceException|IndexOutOfRangeException", "forbid": true } }
   ]
 }

@@ -231,6 +231,9 @@ def run_step(step):
         return check_mods(step["expect_mods"])
     if "expect_clean" in step:
         return check_no_errors(step.get("who", "server"))
+    if "expect_console" in step:
+        spec = step["expect_console"]
+        return check_console(spec["tel"], spec["pattern"], forbid=spec.get("forbid", False), wait=spec.get("wait", 2.5))
     return False, "unknown step: " + json.dumps(step)[:80]
 
 
@@ -359,6 +362,27 @@ def screenshot(who, out):
     return code == 0 and exists, out
 
 
+def check_console(cmd, pattern, forbid=False, wait=2.5):
+    lines = tel(cmd, wait=wait)
+    text = "\n".join(lines)
+    found = re.search(pattern, text, re.I) is not None
+    ok = found != forbid
+    verb = "absent" if forbid else "present"
+    return ok, f"console '{cmd}' output {verb}: {pattern}"
+
+
+def check_manager_doctor():
+    lines = tel("hr doctor", wait=4.0)
+    text = "\n".join(lines)
+    if "doctor:" not in text:
+        return True, "manager not loaded (doctor skipped)"
+    match = re.search(r"doctor:\s*(\d+)\s*pass,\s*(\d+)\s*fail", text)
+    if not match:
+        return False, "manager doctor did not report a result"
+    passes, fails = int(match.group(1)), int(match.group(2))
+    return fails == 0, f"manager self-check {passes} pass / {fails} fail"
+
+
 def check_ui():
     if "LabA" not in players():
         return True, "client A not connected (ui capture skipped)"
@@ -380,6 +404,7 @@ def default_checks():
         ("mod-logs-clean", check_mod_logs_clean),
         ("poi", check_poi),
         ("pathtest", check_pathtest),
+        ("manager-doctor", check_manager_doctor),
         ("navigation", check_navigation),
         ("ui", check_ui),
     ]

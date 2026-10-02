@@ -104,6 +104,21 @@ def build_probe(destination):
     return package
 
 
+def build_manager(destination):
+    """Build the manager (Jon's Mod Browser + Hot Reload) into the run and return its folder."""
+    out = RUN / "manager"
+    if out.exists():
+        shutil.rmtree(out)
+    subprocess.run([PWsh, "-NoProfile", "-File", str(ROOT / "scripts" / "build.ps1"),
+                    "-GamePath", str(GAME), "-OutputPath", str(out)], check=True, capture_output=True)
+    source = out / "HotReloadTool"
+    target = Path(destination) / "HotReloadTool"
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(source, target)
+    return target
+
+
 def write_config(extra=None):
     text = (GAME / "serverconfig.xml").read_text()
     overrides = {
@@ -135,6 +150,8 @@ def up(wait=180, extra_config=None):
     print("mods: " + ", ".join(mods))
     build_probe(RUN / "server" / "Mods")
     print("probe: SimProbe")
+    build_manager(RUN / "server" / "Mods")
+    print("manager: HotReloadTool")
     write_config(extra_config)
     (RUN / "server").mkdir(parents=True, exist_ok=True)
     log = RUN / "server.log"
@@ -156,7 +173,9 @@ def up(wait=180, extra_config=None):
             with socket.create_connection(("127.0.0.1", TELNET), timeout=1) as s:
                 s.sendall(b"version\r\n")
                 if b"7DTD server" in s.recv(4096):
-                    print("server ready on telnet " + str(TELNET))
+                    print("telnet up; waiting for world load...")
+                    ready, _ = wait_for_log(log, r"StartGame done", wait)
+                    print("server ready" if ready else "world did not report StartGame done")
                     return 0
         except OSError:
             pass

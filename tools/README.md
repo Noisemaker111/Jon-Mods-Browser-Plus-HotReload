@@ -99,7 +99,8 @@ python tools/engine.py config-export         # the config the engine actually ap
 
 It is read-only against a running lab (never starts/stops/reconfigures it), allow-lists
 known dev-launch noise, skips client-dependent checks gracefully when no client is
-connected, and exits non-zero on any real failure.
+connected, and exits non-zero on any real failure. `manager-doctor` runs the manager's own
+`hr doctor` self-check and requires zero failures.
 
 ## Engine scenarios (declarative)
 
