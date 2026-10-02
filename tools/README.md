@@ -44,9 +44,24 @@ is the 1:1 confirmation of what the preview laid out.
 
 ## Engine tier: live world, nav, POIs, generation, real UI
 
-This is the existing lab. It launches an isolated headless server and two isolated
-windowed clients with isolated user-data folders, injects real keyboard/mouse, captures
-screenshots, and drives the server console over telnet.
+Two ways in:
+
+**Self-contained (no hand-started lab, CI-friendly):** `tools/headless.py` builds the mods,
+boots an isolated dedicated server on its own ports (27240/27249), runs scenarios, and shuts
+down — all in one command.
+
+```
+python tools/headless.py run                 # up -> baseline scenario -> down
+python tools/headless.py up                  # leave it running, then:
+python tools/headless.py scenario tools/scenarios/my-scenario.json
+python tools/headless.py tel "visitpois start"
+python tools/headless.py check               # default engine checks
+python tools/headless.py down
+```
+
+**Interactive lab (real clients, real input, screenshots):** the existing `lab.py` launches an
+isolated headless server plus two isolated windowed clients with its own user-data folders,
+injects real keyboard/mouse, and captures screenshots.
 
 ```
 python lab.py setup
@@ -58,7 +73,7 @@ python lab.py look A 40 0       # move the camera
 python lab.py tel "help"        # any console command
 ```
 
-On top of the lab, `tools/engine.py` turns the live engine into pass/fail checks:
+On top of either server, `tools/engine.py` turns the live engine into pass/fail checks.
 
 ```
 python tools/engine.py check                 # server-up, mods, logs, poi, pathtest, navigation, ui
