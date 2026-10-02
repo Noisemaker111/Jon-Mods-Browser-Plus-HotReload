@@ -10,7 +10,15 @@ $cecil = Join-Path $GamePath 'Mods\0_TFP_Harmony\Mono.Cecil.dll'
 Copy-Item -LiteralPath $cecil -Destination $work
 $compiler = 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\Roslyn\csc.exe'
 $sources = @('mods/JonCategoryStorage/src/Rules.cs','mods/JonFollow/src/Rules.cs','mods/JonLootSkulls/src/Rules.cs','mods/JonLootSkulls/src/LootLedger.cs','mods/JonSharedWaypoints/src/TeamProtocol.cs','mods/JonGroundPings/src/TeamProtocol.cs','src/TeamEnvelope.cs','tests/CoopChecks.cs') | ForEach-Object { Join-Path $repo $_ }
-& $compiler -nologo -target:exe -r:System.Core.dll ('-r:' + $cecil) ('-out:' + (Join-Path $work 'CoopChecks.exe')) @sources
+# Compile against the game's own API too, so a gameplay source that legitimately uses
+# engine type names (GamePrefs, enums) does not fail only because this check is narrow.
+$managed = Join-Path $GamePath '7DaysToDie_Data\Managed'
+$options = @('-nologo','-target:exe','-r:System.Core.dll')
+# Keep the framework runtime (do not reference the game's Mono mscorlib/netstandard);
+# add the game API so legitimate engine type names compile.
+foreach ($reference in @((Join-Path $managed 'Assembly-CSharp.dll'), (Join-Path $managed 'UnityEngine.CoreModule.dll'), $cecil)) { $options += '-r:' + $reference }
+$options += '-out:' + (Join-Path $work 'CoopChecks.exe')
+& $compiler @options @sources
 if ($LASTEXITCODE -ne 0) { throw 'Individual gameplay check compilation failed' }
 $dlls = @()
 foreach ($build in $built) {
