@@ -78,9 +78,24 @@ public static class GameSim
         try { mod = Assembly.LoadFrom(dll); }
         catch (Exception e) { Fail(Path.GetFileName(dll) + ": assembly did not load: " + Root(e).Message); return; }
 
+        var ran = false;
         var categories = mod.GetType("JonCategoryStorage.Categories");
-        if (categories == null) { Console.WriteLine("  (no known surface in this mod)"); Console.WriteLine(); return; }
+        if (categories != null) { CategoryChecks(mod, categories); ran = true; }
+        if (mod.GetType("JonFollow.Rules") != null) { FollowRulesChecks(mod); ran = true; }
+        if (mod.GetType("JonLootSkulls.LootLedger") != null) { LedgerChecks(mod); ran = true; }
+        var protocol = mod.GetType("JonSharedWaypoints.TeamProtocol") ?? mod.GetType("JonGroundPings.TeamProtocol");
+        if (protocol != null) { ProtocolChecks(mod, protocol); ran = true; }
 
+        if (!ran) Console.WriteLine("  (no known surface in this mod)");
+
+        // Gameplay assemblies must not drag the manager or each other in.
+        Check(!mod.GetReferencedAssemblies().Any(r => r.Name == "HotReloadTool" || r.Name == "JonCoopQoL"),
+            mod.GetName().Name + " has no manager or combined-mod dependency");
+        Console.WriteLine();
+    }
+
+    static void CategoryChecks(Assembly mod, Type categories)
+    {
         var of = categories.GetMethod("Of", new[] { typeof(ItemClass) });
         Check(of != null, "real Categories.Of(ItemClass) resolves against the built mod");
         if (of == null) return;
@@ -106,8 +121,7 @@ public static class GameSim
         Check(exceptions == 0, "all " + (defs.Count + modifiers.Count) + " real definitions classify without an exception");
         Console.WriteLine("  buckets: " + string.Join(", ", buckets.Select(kv => kv.Key + "=" + kv.Value)));
 
-        // 2. Known definitions land in the intended destination: the exact cases
-        //    that until now required booting the game to trust.
+        // 2. Known definitions land in the intended destination.
         var expectations = new List<(string Name, string Expected)>
         {
             ("gunHandgunT1Pistol", "06 Weapons"),
@@ -163,12 +177,88 @@ public static class GameSim
             prefix.Invoke(null, emptyArgs);
             Check((string)emptyArgs[1] == "zzzzz", "SortCategory.Prefix keeps empty stacks last");
         }
-
-        // 5. Gameplay assemblies must not drag the manager or each other in.
-        Check(!mod.GetReferencedAssemblies().Any(r => r.Name == "HotReloadTool" || r.Name == "JonCoopQoL"),
-            mod.GetName().Name + " has no manager or combined-mod dependency");
-        Console.WriteLine();
     }
+
+    static void FollowRulesChecks(Assembly mod)
+    {
+        var rules = mod.GetType("JonFollow.Rules");
+        var vehicle = rules.GetMethod("VehicleControl");
+        var drive = vehicle.Invoke(null, new object[] { 70f, 15f, 8f, 8f, false });
+        Check(Field<bool>(drive, "Brake") == false && Field<float>(drive, "Forward") > 0 && Field<float>(drive, "Steer") > 0,
+            "real JonFollow vehicle control drives forward and steers toward a moving friend");
+        var closing = vehicle.Invoke(null, new object[] { 20f, -15f, 15f, 0f, false });
+        Check(Field<bool>(closing, "Brake") && Field<float>(closing, "Forward") == 0 && Field<float>(closing, "Steer") < 0,
+            "real JonFollow brakes on closing speed instead of ramming a stopped friend");
+
+        var sprint = rules.GetMethod("Sprint");
+        Check((bool)sprint.Invoke(null, new object[] { true, 6f, 2f }) && !(bool)sprint.Invoke(null, new object[] { false, 3f, 3f }),
+            "real JonFollow sprint matches the leader's pace");
+        Check((bool)sprint.Invoke(null, new object[] { true, 4.5f, 5f }) && !(bool)sprint.Invoke(null, new object[] { true, 3f, 3f }),
+            "real JonFollow sprint hysteresis holds pace when close behind a walker");
+
+        var cancel = rules.GetMethod("CancelFollow");
+        Check(!(bool)cancel.Invoke(null, new object[] { false, false, true, 10f }) &&
+              (bool)cancel.Invoke(null, new object[] { false, false, true, 200f }),
+            "real JonFollow tether ends beyond range and holds inside it");
+    }
+
+    static void LedgerChecks(Assembly mod)
+    {
+        var ledgerType = mod.GetType("JonLootSkulls.LootLedger");
+        var recordType = mod.GetType("JonLootSkulls.LootRecord");
+        var ledger = Activator.CreateInstance(ledgerType);
+        var records = (System.Collections.IDictionary)ledgerType.GetField("Records").GetValue(ledger);
+        var record = Activator.CreateInstance(recordType);
+        recordType.GetField("Key").SetValue(record, "1,2,3");
+        recordType.GetField("X").SetValue(record, 1);
+        recordType.GetField("Z").SetValue(record, 3);
+        recordType.GetField("PoiId").SetValue(record, 15);
+        recordType.GetField("TouchedHours").SetValue(record, 100);
+        records["1,2,3"] = record;
+
+        var file = Path.Combine(Path.GetTempPath(), "sim-ledger-" + Guid.NewGuid().ToString("N") + ".xml");
+        ledgerType.GetMethod("Save").Invoke(ledger, new object[] { file });
+        var reopened = Activator.CreateInstance(ledgerType);
+        ledgerType.GetMethod("Load").Invoke(reopened, new object[] { file });
+        var restored = (System.Collections.IDictionary)ledgerType.GetField("Records").GetValue(reopened);
+        Check(restored.Count == 1, "real JonLootSkulls ledger survives save and reload");
+        ledgerType.GetMethod("ClearPoi").Invoke(reopened, new object[] { 15 });
+        Check(((System.Collections.IDictionary)ledgerType.GetField("Records").GetValue(reopened)).Count == 0,
+            "real JonLootSkulls clear removes exactly that POI's records");
+        if (File.Exists(file)) File.Delete(file);
+    }
+
+    static void ProtocolChecks(Assembly mod, Type protocol)
+    {
+        var encode = protocol.GetMethod("Encode");
+        var decode = protocol.GetMethod("Decode");
+        var messageType = encode.GetParameters()[0].ParameterType;
+        var kindType = messageType.GetField("Kind").FieldType;
+
+        var ping = Activator.CreateInstance(messageType);
+        messageType.GetField("Kind").SetValue(ping, Enum.Parse(kindType, "Ping"));
+        messageType.GetField("World").SetValue(ping, "world-a");
+        messageType.GetField("X").SetValue(ping, 10.5f);
+        messageType.GetField("Y").SetValue(ping, 60f);
+        messageType.GetField("Z").SetValue(ping, -42f);
+        messageType.GetField("Heading").SetValue(ping, 33f);
+        var wire = (byte[])encode.Invoke(null, new object[] { ping });
+        var back = decode.Invoke(null, new object[] { wire });
+        Check((float)messageType.GetField("X").GetValue(back) == 10.5f && (float)messageType.GetField("Heading").GetValue(back) == 33f,
+            "real " + protocol.Name + " ping round-trips world position and heading");
+
+        var bad = Activator.CreateInstance(messageType);
+        messageType.GetField("Kind").SetValue(bad, Enum.Parse(kindType, "Ping"));
+        messageType.GetField("World").SetValue(bad, "world-a");
+        messageType.GetField("X").SetValue(bad, float.NaN);
+        var rejected = false;
+        try { var bytes = (byte[])encode.Invoke(null, new object[] { bad }); decode.Invoke(null, new object[] { bytes }); }
+        catch (Exception e) { rejected = Root(e) is InvalidDataException; }
+        Check(rejected, "real " + protocol.Name + " rejects non-finite ping coordinates");
+    }
+
+    static T Field<T>(object target, string name) =>
+        (T)target.GetType().GetField(name).GetValue(target);
 
     static ItemClass Resolve(string name) =>
         byName.TryGetValue(name, out var item) ? item : (modifiers.TryGetValue(name, out var mod) ? mod : null);
