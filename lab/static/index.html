@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7DTD Mod Lab</title>
+<style>
+  :root { --bg:#0f1116; --panel:#171a21; --line:#262b36; --ink:#e6e9ef; --dim:#9aa3b2;
+          --accent:#7aa2f7; --ok:#7bd88f; --bad:#f7768e; --warn:#e0af68; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.5 Segoe UI, system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:5; }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .spacer { flex:1; }
+  header .meta { color:var(--dim); font-size:12px; }
+  nav { display:flex; gap:4px; padding:10px 20px 0; }
+  nav button { background:transparent; color:var(--dim); border:1px solid transparent; border-bottom:none; padding:8px 14px; border-radius:8px 8px 0 0; cursor:pointer; font-size:13px; }
+  nav button:hover { color:var(--ink); }
+  nav button.active { color:var(--ink); background:var(--panel); border-color:var(--line); }
+  main { padding:16px 20px 40px; }
+  section { display:none; }
+  section.active { display:block; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card h3 { margin:0 0 8px; font-size:13px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  button.run { background:var(--accent); color:#0b0e13; border:none; border-radius:8px; padding:8px 14px; font-weight:600; cursor:pointer; font-size:13px; }
+  button.run.secondary { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  button.run:disabled { opacity:.5; cursor:default; }
+  pre { background:#0b0e13; border:1px solid var(--line); border-radius:8px; padding:12px; overflow:auto; max-height:60vh; font:12px/1.45 Consolas, monospace; white-space:pre-wrap; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; }
+  .thumb { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; cursor:zoom-in; }
+  .thumb img { width:100%; height:130px; object-fit:contain; background:#0b0e13; display:block; }
+  .thumb div { padding:6px 9px; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--dim); }
+  .pill.ok { color:var(--ok); border-color:#2a4a35; } .pill.bad { color:var(--bad); border-color:#4a2a33; }
+  .mapwrap { position:relative; background:#0b0e13; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  canvas { display:block; width:100%; cursor:crosshair; }
+  .mapbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .mapbar label { color:var(--dim); font-size:12px; display:flex; gap:6px; align-items:center; }
+  select, input[type=range] { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
+  .legend { display:flex; gap:14px; flex-wrap:wrap; color:var(--dim); font-size:12px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; }
+  dialog { background:var(--panel); border:1px solid var(--line); border-radius:12px; max-width:92vw; max-height:92vh; color:var(--ink); }
+  dialog img { max-width:88vw; max-height:80vh; display:block; }
+  dialog::backdrop { background:#000b; }
+</style>
+</head>
+<body>
+<header>
+  <h1>7DTD Mod Lab</h1>
+  <span class="meta" id="meta">loading…</span>
+  <span class="spacer"></span>
+  <span class="pill" id="branch">—</span>
+</header>
+<nav>
+  <button data-tab="tests" class="active">Tests</button>
+  <button data-tab="previews">Previews</button>
+  <button data-tab="map">Map</button>
+</nav>
+<main>
+  <section id="tests" class="active">
+    <div class="row" style="margin-bottom:12px">
+      <button class="run" data-job="sim">Run headless (5s)</button>
+      <button class="run secondary" data-job="probe">Run engine probe</button>
+      <button class="run secondary" data-job="engine">Run engine baseline</button>
+      <button class="run secondary" data-job="chain">Run full chain</button>
+      <span id="jobstate" class="pill">idle</span>
+    </div>
+    <pre id="output">Pick a test to run. Everything runs locally; nothing is installed or sent anywhere.</pre>
+  </section>
+  <section id="previews">
+    <p class="meta" style="color:var(--dim);margin-top:0">Rendered UI previews and maps from your latest runs. Click to enlarge.</p>
+    <div class="grid" id="gallery"></div>
+  </section>
+  <section id="map">
+    <div class="mapbar">
+      <label>World <select id="world"></select></label>
+      <label>Zoom <input type="range" id="zoom" min="1" max="8" step="0.25" value="1"></label>
+      <label><input type="checkbox" id="showSpawns" checked> spawns</label>
+      <label><input type="checkbox" id="showPrefabs" checked> prefabs</label>
+      <label><input type="checkbox" id="showRoutes" checked> follow route</label>
+      <span class="meta" id="hover" style="color:var(--dim)">—</span>
+    </div>
+    <div class="mapwrap"><canvas id="map" height="720"></canvas></div>
+    <div class="legend" style="margin-top:8px">
+      <span><i style="background:#ffd166"></i>spawn</span>
+      <span><i style="background:#7aa2f7"></i>prefab</span>
+      <span><i style="background:#f7768e"></i>leader</span>
+      <span><i style="background:#7bd88f"></i>follower</span>
+      <span style="color:var(--dim)">click the map to read a world coordinate</span>
+    </div>
+  </section>
+</main>
+<dialog id="lightbox"><img id="lightimg" alt=""></dialog>
+<script>
+const $ = (s) => document.querySelector(s);
+let world = null, telemetry = null, mapImg = new Image();
+
+// tabs
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('section').forEach(x => x.classList.remove('active'));
+  b.classList.add('active'); $('#' + b.dataset.tab).classList.add('active');
+  if (b.dataset.tab === 'map') drawMap();
+  if (b.dataset.tab === 'previews') loadPreviews();
+});
+
+async function api(path) { const r = await fetch(path); return r.json(); }
+
+async function status() {
+  const s = await api('/api/status');
+  $('#branch').textContent = s.branch || 'detached';
+  $('#meta').textContent = s.game;
+}
+
+async function loadPreviews() {
+  const items = await api('/api/previews');
+  const g = $('#gallery'); g.innerHTML = '';
+  for (const p of items) {
+    const el = document.createElement('div'); el.className = 'thumb';
+    el.innerHTML = `<img loading="lazy" src="${p.url}" alt=""><div title="${p.name}">${p.name}</div>`;
+    el.onclick = () => { $('#lightimg').src = p.url; $('#lightbox').showModal(); };
+    g.appendChild(el);
+  }
+}
+
+async function runJob(job) {
+  const out = $('#output'), state = $('#jobstate');
+  document.querySelectorAll('button.run').forEach(b => b.disabled = true);
+  state.textContent = 'running…'; state.className = 'pill warn';
+  out.textContent = 'starting ' + job + '…';
+  try {
+    const r = await api('/api/run?job=' + encodeURIComponent(job));
+    out.textContent = r.output || '(no output)';
+    state.textContent = r.ok ? 'passed' : 'failed';
+    state.className = 'pill ' + (r.ok ? 'ok' : 'bad');
+  } catch (e) {
+    out.textContent = String(e); state.textContent = 'error'; state.className = 'pill bad';
+  } finally {
+    document.querySelectorAll('button.run').forEach(b => b.disabled = false);
+  }
+}
+document.querySelectorAll('button.run').forEach(b => b.onclick = () => runJob(b.dataset.job));
+
+// map
+async function loadWorlds() {
+  const list = await api('/api/worlds');
+  const sel = $('#world'); sel.innerHTML = '';
+  for (const w of list) sel.innerHTML += `<option value="${w.name}">${w.name} (${w.size})</option>`;
+  if (list.length) { sel.value = 'Navezgane'; await pickWorld(); }
+  sel.onchange = pickWorld;
+}
+async function pickWorld() {
+  world = await api('/api/world/' + $('#world').value);
+  mapImg = new Image();
+  mapImg.onload = drawMap;
+  mapImg.src = '/worlds/' + world.name + '/biomes.png';
+  const t = await api('/api/telemetry');
+  if (t.length) telemetry = await api('/api/telemetry/' + encodeURIComponent(t[0].name));
+  else telemetry = null;
+  drawMap();
+}
+function toImage(x, z) {
+  const [iw, ih] = world.image, size = world.size;
+  return [ (x + size / 2) / size * iw, (size / 2 - z) / size * ih ];
+}
+function drawMap() {
+  if (!world) return;
+  const c = $('#map'), ctx = c.getContext('2d');
+  const zoom = parseFloat($('#zoom').value);
+  const [iw, ih] = world.image;
+  const scale = (c.clientWidth / iw) * zoom;
+  c.width = c.clientWidth; c.height = Math.round(ih * scale);
+  ctx.imageSmoothingEnabled = zoom <= 2;
+  ctx.fillStyle = '#0b0e13'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(mapImg, 0, 0, c.width, c.height);
+  const px = (x, z) => { const [ix, iy] = toImage(x, z); return [ix * scale, iy * scale]; };
+
+  if ($('#showPrefabs').checked && world.prefabs) {
+    ctx.fillStyle = 'rgba(122,162,247,.75)';
+    for (const p of world.prefabs) { const [x, y] = px(p.x, p.z); ctx.fillRect(x - 1.5, y - 1.5, 3, 3); }
+  }
+  if ($('#showRoutes').checked && telemetry && telemetry.samples) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#f7768e'; ctx.beginPath();
+    telemetry.samples.forEach((s, i) => { const [x, y] = px(s.l[0], s.l[2]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+    ctx.strokeStyle = '#7bd88f'; ctx.beginPath();
+    telemetry.samples.forEach((s, i) => { const [x, y] = px(s.p[0], s.p[2]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+  if ($('#showSpawns').checked && world.spawns) {
+    for (const s of world.spawns) {
+      const [x, y] = px(s[0], s[2]);
+      ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fillStyle = '#ffd166'; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = '#0b0e13'; ctx.stroke();
+    }
+  }
+}
+$('#zoom').onchange = drawMap;
+['showSpawns', 'showPrefabs', 'showRoutes'].forEach(id => $('#' + id).onchange = drawMap);
+$('#map').onmousemove = (e) => {
+  if (!world) return;
+  const rect = e.target.getBoundingClientRect();
+  const [iw, ih] = world.image, scale = (e.target.clientWidth / iw) * parseFloat($('#zoom').value);
+  const ix = (e.clientX - rect.left) / scale, iy = (e.clientY - rect.top) / scale;
+  const x = ix / iw * world.size - world.size / 2;
+  const z = world.size / 2 - iy / ih * world.size;
+  $('#hover').textContent = `x ${x.toFixed(0)}  z ${z.toFixed(0)}`;
+};
+window.addEventListener('resize', drawMap);
+
+status(); loadPreviews(); loadWorlds();
+</script>
+</body>
+</html>

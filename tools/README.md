@@ -11,6 +11,19 @@ actually catch the mistake; only fall through to the next when it cannot.
 | **In-engine probe** (`tools/headless.py probe`) | The real mod code executed **inside** the running engine against the engine's own loaded data | Categories and Harmony patches against the `ItemClass` objects the game actually built, not a reimplementation | ~1 min |
 | **UI** (`tools/xui-preview.py`) | The real XUi patch applied to the real template, rendered to PNG | Panel layout, spacing, colours, which controls exist before touching the game | <1s |
 
+## Local lab site
+
+Everything above is available in a browser instead of the console:
+
+```
+python lab/server.py          # http://127.0.0.1:7777, opens automatically
+```
+
+Tabs: **Tests** (run the headless tier, the probe, the engine baseline or the full chain,
+with output inline), **Previews** (every PNG under `.scratch`, click to enlarge), and
+**Map** (the game's own biome map for any world, with spawn points, prefab markers and the
+newest follow-telemetry route — the top-down map for improving pathfinding). See `lab/README.md`.
+
 ## UI preview (no launch)
 
 ```

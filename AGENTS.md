@@ -5,6 +5,7 @@ Use `powershell -NoProfile -File scripts/build.ps1` to compile and package; buil
 Run `powershell -NoProfile -File scripts/test.ps1` for archive, pack and transfer invariants using production source.
 `scripts/test.ps1` also runs `scripts/Test-Sim.ps1`: a headless harness that boots the installed game's real assemblies and data and runs each built mod's real code against them, no game launch. It needs PowerShell 7 (`pwsh`); `test.ps1` relaunches itself there. See `tools/README.md` for the full offline/scripted testing model: logic, static, engine and UI tiers.
 Use `scripts/test-all.ps1 -Engine` to run every tier, including the real headless engine, the in-engine mod probe and random-world generation. Never point an engine run at Jon's `%AppData%\7DaysToDie`; runs are isolated under `.scratch`.
+`python lab/server.py` starts a local browser lab (tests, previews, world map) for interactive work. See `lab/README.md`.
 Scratch, build artifacts and verification evidence belong in the checkout home's `.scratch/`.
 Land verified changes on `beta`. Releases from beta are prereleases; stable promotion requires Jon's request.
 Never query another site's mod catalog without written permission. The catalog defaults to Jon's `7d2dmods.gg`.
