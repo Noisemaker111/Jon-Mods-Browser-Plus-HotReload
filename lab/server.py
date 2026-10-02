@@ -1,279 +1,477 @@
-"""
-Local lab site.
-
-A tiny read-mostly web server for developing the 7DTD mod lab in a browser: run the
-test tiers, look at UI previews, and see the real world map with follow-telemetry
-routes on it. Binds to 127.0.0.1 only.
-
-  python lab/server.py            # http://127.0.0.1:7777
-  python lab/server.py --port 7788
-  python lab/server.py --no-open
-
-Endpoints (all JSON unless noted):
-  GET  /                          the site
-  GET  /static/<file>             assets
-  GET  /api/status                repo, branch, game, tiers
-  GET  /api/previews              UI preview PNGs found under .scratch
-  GET  /api/run?job=sim           run the fast headless tier, return its output
-  GET  /api/run?job=probe         run the in-engine probe (slow), return its output
-  GET  /api/run?job=chain         run the full fast chain (slow)
-  GET  /api/worlds                worlds with map metadata
-  GET  /worlds/<name>/biomes.png  the game's own biome map image
-  GET  /api/world/<name>          spawn points, prefab markers and transform
-  GET  /api/telemetry             follow telemetry files
-  GET  /api/telemetry/<file>      parsed samples and routes for one file
-"""
+"""Local-only mod workspace. Start with: python lab/server.py [--no-open]."""
 import argparse
-import glob
+import base64
+import hashlib
+import io
 import json
+import math
+import mimetypes
 import os
 import re
+import secrets
 import subprocess
 import sys
 import threading
+import time
+import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import parse_qs, unquote, urlencode, urlparse
+from xml.etree import ElementTree as ET
 
-GAME = Path(r"C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die")
+GAME = Path(os.environ.get("LAB_GAME", r"C:\Program Files (x86)\Steam\steamapps\common\7 Days To Die"))
 HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent                                   # worktree root
+ROOT = HERE.parent
 STATIC = HERE / "static"
-PWSH = os.environ.get("LAB_PWSH") or "pwsh"
-PORT = 7777
-RUNNING = {}
-LOCK = threading.Lock()
+PWSH = os.environ.get("LAB_PWSH", "pwsh")
+TOKEN = secrets.token_urlsafe(32)
+LOCK = threading.RLock()
+JOBS = {}
+ACTIVE = None
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+SUITES = {
+    "sim": {"title": "Mod logic", "detail": "Real game data + mod code. No game launch.", "engine": False},
+    "static": {"title": "Game compatibility", "detail": "Check DLL targets and XML patches. No game launch.", "engine": False},
+    "chain": {"title": "All offline checks", "detail": "Build, archives, logic, UI and compatibility.", "engine": False},
+    "probe": {"title": "Inside the engine", "detail": "Launch an isolated headless server; test container routing.", "engine": True},
+    "engine": {"title": "World baseline", "detail": "Launch an isolated headless server; check mods, world and logs.", "engine": True},
+    "scenario": {"title": "Custom scenario", "detail": "Build your own console assertions in the browser.", "engine": True},
+}
+PREVIEW_TARGETS = {
+    "party": {"title": "Party portrait", "flag": "--template", "target": "party_entry"},
+    "menu": {"title": "Main menu / MODS button", "flag": "--window", "target": "mainMenu"},
+}
 
 
 def scratch():
-    try:
-        common = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                                capture_output=True, text=True, check=True).stdout.strip()
-        return Path(common).parent / ".scratch"
-    except Exception:
-        return ROOT / ".scratch"
+    common = subprocess.check_output(
+        ["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip()
+    return Path(common).parent / ".scratch"
 
 
-def run(command, timeout):
-    """Run a command, capture output, never raise."""
+def workspace():
+    home = scratch() / "weblab"
+    home.mkdir(parents=True, exist_ok=True)
+    return home
+
+
+def atomic_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = path.with_suffix(".tmp")
+    temp.write_text(json.dumps(data, ensure_ascii=False, allow_nan=False), encoding="utf-8")
+    temp.replace(path)
+
+
+def safe_child(base, name):
+    path = (base / name).resolve()
+    if not path.is_relative_to(base.resolve()):
+        raise ValueError("Path is outside the allowed folder")
+    return path
+
+
+def check_results(output):
+    results = []
+    for line in ANSI.sub("", output).splitlines():
+        match = re.match(r"^\s*(?:\[SimProbe\]\s*)?(PASS|FAIL|SKIP)\s+(.+)", line)
+        if match:
+            status = match[1].lower()
+            if status == "pass" and "skipped" in match[2].lower():
+                status = "skip"
+            results.append({"status": status, "label": match[2]})
+    return results
+
+
+def snapshot(job):
+    return {**job, "checks": check_results(job.get("output", ""))}
+
+
+def job_list():
+    with LOCK:
+        return [snapshot(j) for j in sorted(JOBS.values(), key=lambda j: j["started"], reverse=True)[:40]]
+
+
+def load_jobs():
+    for path in (workspace() / "jobs").glob("*.json"):
+        try:
+            job = json.loads(path.read_text(encoding="utf-8"))
+            if job["status"] == "running":
+                job.update(status="interrupted", finished=time.time())
+                job["output"] += "\nLab server stopped before this result was recorded.\n"
+            JOBS[job["id"]] = job
+        except (ValueError, KeyError, OSError):
+            continue
+
+
+def command_for(kind, params, job_id):
+    if kind in ("sim", "static", "chain"):
+        script = {"sim": "Test-Sim.ps1", "static": "Test-Coop.ps1", "chain": "test.ps1"}[kind]
+        return [PWSH, "-NoProfile", "-File", str(ROOT / "scripts" / script)], 600, None
+    if kind in ("probe", "engine"):
+        return [sys.executable, "-u", str(ROOT / "tools" / "headless.py"), "probe" if kind == "probe" else "run"], 900, None
+    if kind == "scenario":
+        scenario = validate_scenario(params)
+        path = workspace() / "scenarios" / (job_id + ".json")
+        atomic_json(path, scenario)
+        return [sys.executable, "-u", str(ROOT / "tools" / "headless.py"), "run", "--scenario", str(path)], 900, None
+    if kind == "preview":
+        target = PREVIEW_TARGETS.get(params.get("target", "party"))
+        state = params.get("state", "healthy")
+        if not target or state not in ("healthy", "low", "dead", "muted", "far"):
+            raise ValueError("Unknown preview or player state")
+        values = params.get("values", {})
+        if not isinstance(values, dict) or any(not isinstance(v, (str, int, float, bool)) for v in values.values()):
+            raise ValueError("Preview values must be simple JSON fields")
+        folder = workspace() / "previews"
+        folder.mkdir(exist_ok=True)
+        value_path = folder / (job_id + ".json")
+        atomic_json(value_path, values)
+        out = folder / (job_id + ".png")
+        command = [sys.executable, "-u", str(ROOT / "tools" / "xui-preview.py"), target["flag"], target["target"],
+                   "--state", state, "--values", str(value_path), "--out", str(out), "--size", "2"]
+        return command, 60, out
+    raise ValueError("Unknown test suite")
+
+
+def start_job(kind, params=None):
+    global ACTIVE
+    with LOCK:
+        if ACTIVE:
+            raise RuntimeError("Another job is running; wait for it to finish")
+        if params is not None and not isinstance(params, dict):
+            raise ValueError("Job parameters must be a JSON object")
+        job_id = uuid.uuid4().hex
+        command, timeout, artifact = command_for(kind, params or {}, job_id)
+        job = {"id": job_id, "kind": kind, "params": params or {}, "started": time.time(),
+               "finished": None, "status": "running", "output": "", "exitCode": None, "artifact": None}
+        JOBS[job_id] = job
+        ACTIVE = job_id
+        atomic_json(workspace() / "jobs" / (job_id + ".json"), job)
+        threading.Thread(target=execute_job, args=(job, command, timeout, artifact), daemon=True).start()
+        return snapshot(job)
+
+
+def execute_job(job, command, timeout, artifact):
+    global ACTIVE
+    process = None
+    expired = threading.Event()
+    timer = None
     try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, cwd=str(ROOT))
-        output = (result.stdout or "") + (result.stderr or "")
-        return result.returncode == 0, output[-20000:]
-    except subprocess.TimeoutExpired:
-        return False, "timed out after " + str(timeout) + "s"
+        env = {**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"}
+        process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                   text=True, encoding="utf-8", errors="replace", env=env)
+
+        def expire():
+            expired.set()
+            if process.poll() is None:
+                # Kill this job's process tree only, never other lab/game processes.
+                if os.name == "nt":
+                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
+                else:
+                    process.kill()
+
+        timer = threading.Timer(timeout, expire)
+        timer.start()
+        for line in process.stdout:
+            with LOCK:
+                job["output"] = (job["output"] + ANSI.sub("", line))[-250000:]
+        code = process.wait()
+        with LOCK:
+            failed_checks = any(c["status"] == "fail" for c in check_results(job["output"]))
+            job.update(exitCode=code, status="timeout" if expired.is_set() else "passed" if code == 0 and not failed_checks else "failed")
+            if expired.is_set():
+                job["output"] += "\nJob timed out. Inspect engine logs if a server run was interrupted.\n"
+            if code == 0 and artifact and artifact.exists():
+                job["artifact"] = "/file?" + urlencode({"path": str(artifact.relative_to(scratch()))})
     except Exception as error:
-        return False, str(error)
+        with LOCK:
+            job.update(status="failed", output=job["output"] + "\n" + str(error))
+    finally:
+        if timer:
+            timer.cancel()
+        if process and process.stdout:
+            process.stdout.close()
+        with LOCK:
+            job["finished"] = time.time()
+            atomic_json(workspace() / "jobs" / (job["id"] + ".json"), job)
+            ACTIVE = None
 
 
-def run_job(job):
-    """Jobs are single-flight: a second request joins the first instead of restarting."""
-    with LOCK:
-        existing = RUNNING.get(job)
-        if existing:
-            return existing
-    if job == "sim":
-        command, timeout = [PWSH, "-NoProfile", "-File", str(ROOT / "scripts" / "Test-Sim.ps1")], 300
-    elif job == "probe":
-        command, timeout = [sys.executable, str(ROOT / "tools" / "headless.py"), "probe"], 600
-    elif job == "engine":
-        command, timeout = [sys.executable, str(ROOT / "tools" / "headless.py"), "run"], 600
-    elif job == "chain":
-        command, timeout = [PWSH, "-NoProfile", "-File", str(ROOT / "scripts" / "test.ps1")], 600
-    else:
-        return {"ok": False, "output": "unknown job: " + str(job)}
-    result = {"ok": False, "output": "running..."}
-    with LOCK:
-        RUNNING[job] = result
-    ok, output = run(command, timeout)
-    with LOCK:
-        result.update(ok=ok, output=output, job=job)
-    return result
+def validate_scenario(data):
+    """A small read-only assertion surface, not a shell/console proxy."""
+    queries = {"hr doctor", "pois", "gettime", "getgamestats", "listplayers", "version"}
+    name = data.get("name", "Custom browser scenario")
+    steps = data.get("steps")
+    if not isinstance(name, str) or not 1 <= len(name) <= 100:
+        raise ValueError("Give the scenario a short name")
+    if not isinstance(steps, list) or not 1 <= len(steps) <= 20:
+        raise ValueError("Use between 1 and 20 assertion steps")
+    checked = [{"expect_clean": "server"}]
+    for step in steps:
+        if not isinstance(step, dict) or set(step) != {"expect_console"}:
+            raise ValueError("Browser scenarios support console assertions only")
+        spec = step["expect_console"]
+        if not isinstance(spec, dict) or spec.get("tel") not in queries:
+            raise ValueError("Choose a supported read-only console query")
+        pattern = spec.get("pattern")
+        if not isinstance(pattern, str) or not 1 <= len(pattern) <= 250:
+            raise ValueError("Expected-output pattern must be 1–250 characters")
+        try:
+            re.compile(pattern)
+        except re.error as error:
+            raise ValueError("Invalid expected-output pattern: " + str(error)) from error
+        checked.append({"expect_console": {"tel": spec["tel"], "pattern": pattern, "forbid": bool(spec.get("forbid")), "wait": 4}})
+    checked.append({"expect_clean": "server"})
+    return {"name": name, "steps": checked}
 
 
 def previews():
-    found = []
-    for path in sorted(scratch().glob("**/*.png"), key=lambda p: p.stat().st_mtime, reverse=True)[:400]:
-        rel = path.resolve()
-        found.append({"name": path.name, "path": str(path),
-                      "url": "/file?path=" + str(rel).replace("\\", "/"),
-                      "modified": int(path.stat().st_mtime)})
-    return found
-
-
-def safe_file(path):
-    """Only serve files under the scratch home or the lab folder."""
-    resolved = Path(path).resolve()
-    for base in (scratch().resolve(), HERE.resolve()):
-        try:
-            resolved.relative_to(base)
-            return resolved
-        except ValueError:
-            continue
-    return None
-
-
-def worlds():
-    root = GAME / "Data" / "Worlds"
-    result = []
-    for folder in sorted(root.iterdir()):
-        info = folder / "map_info.xml"
-        image = folder / "biomes.png"
-        if not image.exists():
-            continue
-        size = 6144
-        if info.exists():
-            m = re.search(r'HeightMapSize"\s+value="(\d+)\s*,\s*(\d+)"', info.read_text(errors="replace"))
-            if m:
-                size = int(m.group(1))
-        from PIL import Image
-        with Image.open(image) as img:
-            width, height = img.size
-        result.append({"name": folder.name, "size": size, "image": [width, height],
-                       "prefabs": (folder / "prefabs.xml").exists(), "spawns": (folder / "spawnpoints.xml").exists()})
-    return result
+    paths = sorted(scratch().rglob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return [{"name": p.name, "path": str(p.relative_to(scratch())),
+             "url": "/file?" + urlencode({"path": str(p.relative_to(scratch()))}),
+             "modified": p.stat().st_mtime} for p in paths[:300]]
 
 
 def world(name):
-    folder = GAME / "Data" / "Worlds" / name
-    if not folder.exists():
-        return None
-    size = 6144
-    info = folder / "map_info.xml"
-    if info.exists():
-        m = re.search(r'HeightMapSize"\s+value="(\d+)\s*,\s*(\d+)"', info.read_text(errors="replace"))
-        if m:
-            size = int(m.group(1))
+    folder = safe_child(GAME / "Data" / "Worlds", name)
+    if not (folder / "biomes.png").is_file():
+        raise FileNotFoundError("No biome map for this world")
     from PIL import Image
-    with Image.open(folder / "biomes.png") as img:
-        width, height = img.size
-    spawns = []
-    sp = folder / "spawnpoints.xml"
-    if sp.exists():
-        for m in re.finditer(r'position="(-?\d+),(-?\d+),(-?\d+)"', sp.read_text(errors="replace")):
-            spawns.append([int(m.group(1)), int(m.group(2)), int(m.group(3))])
-    prefabs = []
-    pf = folder / "prefabs.xml"
-    if pf.exists():
-        for m in re.finditer(r'<decoration[^>]*type="(\w+)"[^>]*name="([^"]+)"[^>]*position="(-?\d+),(-?\d+),(-?\d+)"', pf.read_text(errors="replace")):
-            prefabs.append({"type": m.group(1), "name": m.group(2),
-                            "x": int(m.group(3)), "z": int(m.group(5))})
-    return {"name": name, "size": size, "image": [width, height], "spawns": spawns, "prefabs": prefabs}
+    with Image.open(folder / "biomes.png") as image:
+        dimensions = list(image.size)
+    properties = {p.get("name"): p.get("value") for p in ET.parse(folder / "map_info.xml").getroot().findall("property")}
+    size = [int(v) for v in properties["HeightMapSize"].split(",")]
+    spawns, prefabs = [], []
+    if (folder / "spawnpoints.xml").exists():
+        spawns = [[float(v) for v in p.get("position").split(",")] for p in ET.parse(folder / "spawnpoints.xml").getroot()]
+    if (folder / "prefabs.xml").exists():
+        for p in ET.parse(folder / "prefabs.xml").getroot():
+            if p.get("position"):
+                x, y, z = [float(v) for v in p.get("position").split(",")]
+                prefabs.append({"name": p.get("name", "unknown"), "type": p.get("type", ""), "x": x, "y": y, "z": z})
+    return {"name": name, "size": size, "image": dimensions, "spawns": spawns, "prefabs": prefabs,
+            "registration": "Biome overlay uses a centered X/Z transform; alignment is not yet verified in-game."}
+
+
+def worlds():
+    base = GAME / "Data" / "Worlds"
+    if not base.exists():
+        return []
+    return [{"name": p.name} for p in sorted(base.iterdir()) if (p / "biomes.png").exists()]
 
 
 def telemetry_files():
-    base = Path(os.environ.get("APPDATA", "")) / "7DaysToDie" / "JonFollow" / "telemetry"
-    if not base.exists():
-        return []
-    return sorted((p for p in base.glob("follow-*.jsonl")), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Include isolated recordings first. Read the real profile only; never write to it.
+    paths = list(scratch().glob("**/JonFollow/telemetry/follow-*.jsonl"))
+    profile = Path(os.environ.get("APPDATA", "")) / "7DaysToDie" / "JonFollow" / "telemetry"
+    paths += list(profile.glob("follow-*.jsonl"))
+    unique = {str(p.resolve()): p for p in paths}
+    return sorted(unique.values(), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def recording_id(path):
+    return hashlib.sha256(str(path.resolve()).encode()).hexdigest()[:24]
 
 
 def telemetry(path):
-    samples, routes = [], []
-    try:
-        for line in Path(path).read_text(errors="replace").splitlines():
-            if not line.strip():
-                continue
+    events, warnings = [], []
+    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        try:
             event = json.loads(line)
-            if event.get("e") == "s":
-                samples.append({"t": event["t"], "p": event["p"], "l": event["l"], "w": event.get("w"),
-                                "mode": event.get("mode"), "stam": event.get("stam"),
-                                "angle": event.get("angle"), "ahead": event.get("ahead")})
-            elif event.get("e") == "route":
-                routes.append({"t": event["t"], "found": event["found"], "pts": event.get("pts", [])})
-    except Exception as error:
-        return {"error": str(error), "samples": [], "routes": []}
-    return {"samples": samples, "routes": routes}
+            if not isinstance(event, dict) or not isinstance(event.get("t"), (int, float)) or not math.isfinite(event["t"]):
+                raise ValueError("missing event time")
+            events.append(event)
+        except (ValueError, TypeError) as error:
+            warnings.append("Line " + str(i + 1) + ": " + str(error))
+    events.sort(key=lambda e: e["t"])
+    samples = [e for e in events if e.get("e") == "s"]
+    routes = [e for e in events if e.get("e") == "route"]
+    return {"name": Path(path).name, "events": events, "samples": samples, "routes": routes,
+            "notes": [e for e in events if e.get("e") in ("note", "end")], "warnings": warnings,
+            "start": events[0]["t"] if events else 0, "end": events[-1]["t"] if events else 0,
+            "world": None, "source": "Recorded game telemetry (world not stored in this format)"}
+
+
+def drawing_path(name):
+    if not re.fullmatch(r"[a-zA-Z0-9_-]{1,80}", name):
+        raise ValueError("Invalid drawing name")
+    return workspace() / "drawings" / (name + ".json")
+
+
+def validate_drawing(data):
+    shapes = data.get("shapes")
+    if not isinstance(shapes, list) or len(shapes) > 5000:
+        raise ValueError("Expected a drawing with at most 5000 shapes")
+    for shape in shapes:
+        if not isinstance(shape, dict) or shape.get("type") not in ("pen", "rect", "arrow", "text"):
+            raise ValueError("Unsupported drawing shape")
+        points = shape.get("points")
+        if not isinstance(points, list) or not 1 <= len(points) <= 20000:
+            raise ValueError("Each shape needs coordinate points")
+        for point in points:
+            if not isinstance(point, list) or len(point) != 2 or any(
+                    not isinstance(v, (int, float)) or not math.isfinite(v) for v in point):
+                raise ValueError("Drawing coordinates must be finite X/Y pairs")
+        if not re.fullmatch(r"#[0-9a-fA-F]{6}", shape.get("color", "#e6bd7b")):
+            raise ValueError("Drawing colors must use six-digit hex")
+        if not isinstance(shape.get("text", ""), str) or len(shape.get("text", "")) > 200:
+            raise ValueError("Drawing labels must be at most 200 characters")
+    return data
 
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
-    def reply(self, code, body, content_type="application/json"):
-        data = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+    def reply(self, code, body, content_type="application/json; charset=utf-8"):
+        data = body if isinstance(body, bytes) else json.dumps(body, allow_nan=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self'; img-src 'self' blob: data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def trusted_host(self):
+        return self.headers.get("Host") in (f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}")
 
     def do_GET(self):
+        if not self.trusted_host():
+            return self.reply(403, {"error": "Local hosts only"})
         parsed = urlparse(self.path)
-        route, query = parsed.path, parse_qs(parsed.query)
+        route, query = unquote(parsed.path), parse_qs(parsed.query)
         try:
-            if route in ("/", "/index.html"):
-                return self.file(STATIC / "index.html", "text/html")
+            if route == "/":
+                return self.file(STATIC / "index.html")
             if route.startswith("/static/"):
-                return self.file(STATIC / route[len("/static/"):])
+                return self.file(safe_child(STATIC, route[8:]))
             if route == "/file":
-                target = safe_file(query.get("path", [""])[0])
-                if not target or not target.exists():
-                    return self.reply(404, {"error": "not found"})
-                return self.file(target)
+                path = safe_child(scratch(), query.get("path", [""])[0])
+                if path.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp"):
+                    raise ValueError("Only image artifacts may be served")
+                return self.file(path)
             if route == "/api/status":
-                branch = subprocess.run(["git", "-C", str(ROOT), "branch", "--show-current"],
-                                        capture_output=True, text=True).stdout.strip()
-                commits = subprocess.run(["git", "-C", str(ROOT), "log", "--oneline", "-5"],
-                                         capture_output=True, text=True).stdout.splitlines()
-                return self.reply(200, {"branch": branch, "commits": commits, "game": str(GAME),
-                                        "repo": str(ROOT), "worlds": [w["name"] for w in worlds()]})
+                branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=ROOT, text=True).strip()
+                return self.reply(200, {"branch": branch, "repo": str(ROOT), "gameAvailable": GAME.exists(),
+                                        "token": TOKEN, "suites": SUITES, "previews": PREVIEW_TARGETS})
+            if route == "/api/jobs":
+                return self.reply(200, job_list())
+            if route.startswith("/api/jobs/"):
+                with LOCK:
+                    job = JOBS.get(route[10:])
+                    if not job:
+                        raise FileNotFoundError("No such job")
+                    return self.reply(200, snapshot(job))
             if route == "/api/previews":
                 return self.reply(200, previews())
-            if route == "/api/run":
-                return self.reply(200, run_job(query.get("job", ["sim"])[0]))
             if route == "/api/worlds":
                 return self.reply(200, worlds())
-            if route.startswith("/worlds/") and route.endswith("/biomes.png"):
-                name = route[len("/worlds/"):-len("/biomes.png")]
-                if not re.match(r"^[\w.-]+$", name):
-                    return self.reply(400, {"error": "bad name"})
-                return self.file(GAME / "Data" / "Worlds" / name / "biomes.png", "image/png")
             if route.startswith("/api/world/"):
-                data = world(route[len("/api/world/"):])
-                return self.reply(200 if data else 404, data or {"error": "no such world"})
+                return self.reply(200, world(route[11:]))
+            if route.startswith("/worlds/") and route.endswith("/biomes.png"):
+                return self.file(safe_child(GAME / "Data" / "Worlds", route[8:-11]) / "biomes.png")
             if route == "/api/telemetry":
-                return self.reply(200, [{"name": p.name, "path": str(p),
-                                         "modified": int(p.stat().st_mtime)} for p in telemetry_files()])
+                return self.reply(200, [{"id": recording_id(p), "name": p.name, "modified": p.stat().st_mtime,
+                                        "source": "isolated lab" if p.is_relative_to(scratch()) else "personal profile (read only)"}
+                                       for p in telemetry_files()])
             if route.startswith("/api/telemetry/"):
-                name = route[len("/api/telemetry/"):]
-                match = next((p for p in telemetry_files() if p.name == name), None)
+                match = next((p for p in telemetry_files() if recording_id(p) == route[15:]), None)
                 if not match:
-                    return self.reply(404, {"error": "no such telemetry file"})
+                    raise FileNotFoundError("No such recording")
                 return self.reply(200, telemetry(match))
-            return self.reply(404, {"error": "unknown route"})
+            if route.startswith("/api/drawings/"):
+                path = drawing_path(route[14:])
+                return self.reply(200, json.loads(path.read_text(encoding="utf-8")) if path.exists() else {"shapes": []})
+            self.reply(404, {"error": "Not found"})
+        except FileNotFoundError as error:
+            self.reply(404, {"error": str(error)})
+        except ValueError as error:
+            self.reply(400, {"error": str(error)})
         except Exception as error:
-            return self.reply(500, {"error": str(error)})
+            self.reply(500, {"error": str(error)})
 
-    def file(self, path, content_type=None):
-        path = Path(path)
-        if not path.exists() or not path.is_file():
-            return self.reply(404, {"error": "not found"})
-        suffix = path.suffix.lower()
-        types = {".html": "text/html", ".js": "text/javascript", ".css": "text/css",
-                 ".png": "image/png", ".json": "application/json", ".svg": "image/svg+xml"}
-        return self.reply(200, path.read_bytes(), content_type or types.get(suffix, "application/octet-stream"))
+    def do_POST(self):
+        origin = self.headers.get("Origin")
+        allowed = (f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}")
+        if not self.trusted_host() or (origin and origin not in allowed) or self.headers.get("X-Lab-Token") != TOKEN:
+            return self.reply(403, {"error": "Use the local lab page to make changes"})
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 1000000:
+                raise ValueError("Body must be between 1 byte and 1 MB")
+            data = json.loads(self.rfile.read(length))
+            if not isinstance(data, dict):
+                raise ValueError("Expected a JSON object")
+            route = unquote(urlparse(self.path).path)
+            if route == "/api/jobs":
+                return self.reply(202, start_job(data.get("kind"), data.get("params")))
+            if route == "/api/exports":
+                png = data.get("png", "")
+                if not isinstance(png, str) or not png.startswith("data:image/png;base64,"):
+                    raise ValueError("Expected a PNG canvas export")
+                try:
+                    raw = base64.b64decode(png.split(",", 1)[1], validate=True)
+                    from PIL import Image
+                    with Image.open(io.BytesIO(raw)) as image:
+                        if image.format != "PNG" or image.width * image.height > 16000000:
+                            raise ValueError("Invalid or oversized canvas export")
+                        image.verify()
+                except (OSError, ValueError) as error:
+                    raise ValueError("Cannot read this PNG export") from error
+                kind = "map" if data.get("kind") == "map" else "design"
+                path = workspace() / "exports" / (kind + "-" + uuid.uuid4().hex[:12] + ".png")
+                path.parent.mkdir(exist_ok=True)
+                path.write_bytes(raw)
+                return self.reply(201, {"saved": True, "path": str(path.relative_to(scratch())),
+                                        "url": "/file?" + urlencode({"path": str(path.relative_to(scratch()))})})
+            if route.startswith("/api/drawings/"):
+                validate_drawing(data)
+                path = drawing_path(route[14:])
+                with LOCK:
+                    atomic_json(path, data)
+                return self.reply(200, {"saved": True, "path": str(path.relative_to(scratch()))})
+            self.reply(404, {"error": "Not found"})
+        except RuntimeError as error:
+            self.reply(409, {"error": str(error)})
+        except (ValueError, TypeError) as error:
+            self.reply(400, {"error": str(error)})
+        except Exception as error:
+            self.reply(500, {"error": str(error)})
+
+    def file(self, path):
+        if not path.is_file():
+            raise FileNotFoundError("File not found")
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        if path.suffix == ".js":
+            content_type = "text/javascript"
+        return self.reply(200, path.read_bytes(), content_type)
 
 
 def main():
-    global PORT
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=PORT)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--port", type=int, default=7777)
     parser.add_argument("--no-open", action="store_true")
     args = parser.parse_args()
-    PORT = args.port
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    url = "http://127.0.0.1:" + str(PORT)
-    print("lab site: " + url)
-    print("repo: " + str(ROOT))
+    load_jobs()
+    server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
+    url = f"http://127.0.0.1:{args.port}"
+    print("Mod lab: " + url, flush=True)
     if not args.no_open:
-        threading.Timer(0.4, lambda: webbrowser.open(url)).start()
+        webbrowser.open(url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("stopped")
+        print("Stopped. Any running job may need inspection before restarting.")
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":

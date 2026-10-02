@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {worldToImage, screenPoint, worldPoint, latestAt, fitPoints} from './static/model.mjs';
+assert.deepEqual(worldToImage(0, 0, [6144, 6144], [3072, 3072]), [1536, 1536]);
+assert.deepEqual(worldToImage(-3072, 3072, [6144, 6144], [3072, 3072]), [0, 0]);
+const view = {x: 318, z: 675, scale: 12};
+const screen = screenPoint(322, 684, view, 800, 570);
+assert.deepEqual(worldPoint(...screen, view, 800, 570), [322, 684]);
+assert.equal(latestAt([{t: 10}, {t: 20}, {t: 30}], 25).t, 20);
+assert.equal(latestAt([{t: 10}], 5), null);
+const fit = fitPoints([[300, 600], [400, 800]], 800, 570);
+assert.equal(fit.x, 350); assert.equal(fit.z, 700);
+console.log('PASS coordinate round trips, centered image transform, replay cutoff and route framing');

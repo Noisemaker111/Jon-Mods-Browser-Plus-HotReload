@@ -1,43 +1,88 @@
-# Local lab site
+# Local mod workspace
 
-A small local web server for developing this lab in a browser instead of the console:
-run the test tiers, look at UI previews, and see the real world map with follow-telemetry
-routes on it. Local only (`127.0.0.1`), no install, nothing sent anywhere.
+Run `python -B lab/server.py`, or double-click `lab/start.cmd`.
+Open **http://127.0.0.1:7777**. Optional: `--port 7791 --no-open`.
+The site is plain HTML + Tailwind CSS + browser JavaScript, with no framework or CDN.
+Compiled CSS is committed, so starting the lab requires no frontend build step.
+To change the styling: `cd lab`, `npm ci`, then `npm run dev` (watch) or `npm run build`.
+Edit `static/index.html` for Tailwind layouts and `static/input.css` for shared controls.
+Python + Pillow, PowerShell 7 and the installed game
+are needed for previews/checks; Node runs the small JavaScript regression checks.
+
+## Workspaces
+
+- **Test bench**: offline logic, compatibility, full chain, and opt-in isolated engine
+  checks. Live output, explicit pass/fail/skip rows and saved run history. Completed
+  checks can be rerun. One job at a time avoids conflicting builds/server lifecycles.
+  The custom test builder saves read-only console assertions as scenario JSON and runs
+  them in a private headless server. It is not an arbitrary command/shell endpoint.
+- **UI studio**: render the party portrait or main menu from actual XML with player-state,
+  name and distance controls. Auto-refresh rereads source every three seconds while
+  this workspace is open. Icons are placeholders, not pixel-exact game textures.
+  Search the evidence gallery and open images at full size.
+- **World & paths**: drag to pan; wheel to zoom at the cursor; fit world or focus route.
+  Choose a real recording from isolated lab clients or the personal profile (read only).
+  Play/scrub the timeline; inspect follower/leader trails, current planned route, planner
+  wall cells, goal, blocked samples and note events. See measured gap over time.
+  Draw routes/areas/notes in world coordinates, save sketches and export PNGs.
+  Zoom buttons and arrow-key panning are available for keyboard/agent use.
+- **Design board**: freehand, boxes, arrows and labels for UI designs, explanations and
+  test setups. Save/load and PNG export; unsaved drawings warn before leaving.
+
+## Boundaries
+
+The biome overview is not streamed block terrain. Its centered X/Z image registration
+has not been confirmed in-game, and the existing follow recording format doesn't store
+world identity: choose the matching world explicitly. Route/wall overlays use recorded
+game coordinates. Drawings do not simulate movement or claim pathfinding correctness.
+
+The site binds only to loopback. Mutations require a local Host, same-origin request and
+session token; GET requests never launch tests. Static/artifact paths are confined, and
+artifact serving is limited to raster images. Nothing writes to Jon's normal game profile.
+Engine checks can launch a dedicated server, but only through the isolated runner.
+
+All generated state goes to the checkout home's `.scratch/weblab/`: jobs, previews,
+scenarios, drawings and PNG exports (also shown in the evidence library). Source remains in this worktree. Stops/interrupted jobs are not
+marked passed. A self-contained engine run refuses to borrow an existing server.
+
+## Agent API
+
+GET `/api/status` supplies the token, suite catalog and branch. POST requires JSON and
+`X-Lab-Token: <token>`.
 
 ```
-python lab/server.py            # http://127.0.0.1:7777, opens your browser
-python lab/server.py --port 7788 --no-open
+GET  /api/jobs                       recent saved runs + live output/check rows
+POST /api/jobs                       {kind: "sim" | "static" | "chain" | "probe" | "engine"}
+GET  /api/jobs/<id>                   one run
+POST /api/jobs                       {kind: "preview", params: {target: "party" | "menu",
+                                      state: "healthy" | "low" | "dead" | "muted" | "far",
+                                      values: {name: "LabA", distance: "128m"}}}
+POST /api/jobs                       {kind: "scenario", params: {name: "Doctor", steps:
+                                      [{expect_console: {tel: "hr doctor", pattern: "0 fail"}}]}}
+GET  /api/previews                   raster evidence gallery
+GET  /api/worlds                     available installed worlds
+GET  /api/world/<name>               XML-parsed spawn/prefab coordinates and map dimensions
+GET  /api/telemetry                  discovered real recordings (opaque IDs)
+GET  /api/telemetry/<id>             complete events, walls, routes, notes + parse warnings
+GET  /api/drawings/<name>            saved shapes; absent drawing returns an empty board
+POST /api/drawings/<name>            {shapes: [{type: "rect" | "arrow" | "pen" | "text",
+                                      points: [[x,y], ...], color: "#6ad3aa", text: "..."}]}
 ```
 
-## Tabs
+Drawing names: `design-board` (1200×700 logical pixels), `map-Navezgane` etc. (world X/Z).
+For custom engine assertions, supported queries are `hr doctor`, `pois`, `gettime`,
+`getgamestats`, `listplayers`, `version`; optional `forbid: true` asserts absence.
 
-- **Tests** — buttons for the headless tier (~5s), the in-engine probe, the engine
-  baseline, and the full chain. Output is shown inline; a job is single-flight, so a
-  second click joins the running one instead of starting another.
-- **Previews** — every PNG under `.scratch` (party panel, main menu, follow maps, world
-  generation), click to enlarge.
-- **Map** — the game's own `biomes.png` for any world, with spawn points, prefab markers
-  and the newest follow telemetry route (leader in red, follower in green). Pan/zoom with
-  the zoom slider; hover reads the world coordinate. This is the top-down map for
-  improving pathfinding.
+## Verification
 
-## API (for future tools and agents)
+`scripts/test.ps1` includes the core web-lab checks. For just this component:
 
 ```
-GET /api/status              repo, branch, recent commits, worlds
-GET /api/previews            images under .scratch
-GET /api/run?job=sim|probe|engine|chain
-GET /api/worlds              worlds with map metadata
-GET /worlds/<name>/biomes.png
-GET /api/world/<name>        spawns (world x,y,z), prefab markers, image size, map size
-GET /api/telemetry           follow telemetry files
-GET /api/telemetry/<file>    parsed samples and routes
+python -B -m unittest discover -s lab -p test_server.py
+node --check lab/static/app.js
+node lab/test-model.mjs
 ```
 
-## Notes
-
-- The map uses the game's own `biomes.png` (Navezgane is 3072², pregens 768²/1024²) and a
-  linear transform between image pixels and world coordinates (image is centred on world
-  0,0). Follow telemetry is the only route source today; the in-engine probe path could be
-  logged the same way when a player is present.
-- Reads only: no endpoint installs, launches the game, or writes to Jon's profile.
+These verify rerunnable/serialized jobs, failure reporting, telemetry discovery/retention,
+path confinement, local API protections, drawing persistence, custom test validation and
+coordinate/replay math. The browser itself still needs real interaction checks.

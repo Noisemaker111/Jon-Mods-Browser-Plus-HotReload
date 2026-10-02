@@ -1,0 +1,12 @@
+{
+  "name": "seven-days-mod-lab",
+  "private": true,
+  "scripts": {
+    "build": "tailwindcss -i static/input.css -o static/style.css --minify",
+    "dev": "tailwindcss -i static/input.css -o static/style.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

@@ -1,216 +1,149 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>7DTD Mod Lab</title>
-<style>
-  :root { --bg:#0f1116; --panel:#171a21; --line:#262b36; --ink:#e6e9ef; --dim:#9aa3b2;
-          --accent:#7aa2f7; --ok:#7bd88f; --bad:#f7768e; --warn:#e0af68; }
-  * { box-sizing: border-box; }
-  body { margin:0; font:14px/1.5 Segoe UI, system-ui, sans-serif; background:var(--bg); color:var(--ink); }
-  header { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--line); background:var(--panel); position:sticky; top:0; z-index:5; }
-  header h1 { font-size:15px; margin:0; font-weight:600; }
-  header .spacer { flex:1; }
-  header .meta { color:var(--dim); font-size:12px; }
-  nav { display:flex; gap:4px; padding:10px 20px 0; }
-  nav button { background:transparent; color:var(--dim); border:1px solid transparent; border-bottom:none; padding:8px 14px; border-radius:8px 8px 0 0; cursor:pointer; font-size:13px; }
-  nav button:hover { color:var(--ink); }
-  nav button.active { color:var(--ink); background:var(--panel); border-color:var(--line); }
-  main { padding:16px 20px 40px; }
-  section { display:none; }
-  section.active { display:block; }
-  .row { display:flex; gap:12px; flex-wrap:wrap; }
-  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
-  .card h3 { margin:0 0 8px; font-size:13px; color:var(--dim); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
-  button.run { background:var(--accent); color:#0b0e13; border:none; border-radius:8px; padding:8px 14px; font-weight:600; cursor:pointer; font-size:13px; }
-  button.run.secondary { background:transparent; color:var(--ink); border:1px solid var(--line); }
-  button.run:disabled { opacity:.5; cursor:default; }
-  pre { background:#0b0e13; border:1px solid var(--line); border-radius:8px; padding:12px; overflow:auto; max-height:60vh; font:12px/1.45 Consolas, monospace; white-space:pre-wrap; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; }
-  .thumb { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; cursor:zoom-in; }
-  .thumb img { width:100%; height:130px; object-fit:contain; background:#0b0e13; display:block; }
-  .thumb div { padding:6px 9px; font-size:12px; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid var(--line); color:var(--dim); }
-  .pill.ok { color:var(--ok); border-color:#2a4a35; } .pill.bad { color:var(--bad); border-color:#4a2a33; }
-  .mapwrap { position:relative; background:#0b0e13; border:1px solid var(--line); border-radius:10px; overflow:hidden; }
-  canvas { display:block; width:100%; cursor:crosshair; }
-  .mapbar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
-  .mapbar label { color:var(--dim); font-size:12px; display:flex; gap:6px; align-items:center; }
-  select, input[type=range] { background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:5px 8px; }
-  .legend { display:flex; gap:14px; flex-wrap:wrap; color:var(--dim); font-size:12px; }
-  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; }
-  dialog { background:var(--panel); border:1px solid var(--line); border-radius:12px; max-width:92vw; max-height:92vh; color:var(--ink); }
-  dialog img { max-width:88vw; max-height:80vh; display:block; }
-  dialog::backdrop { background:#000b; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>7 Days · Mod Lab</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="module" src="/static/app.js"></script>
 </head>
 <body>
-<header>
-  <h1>7DTD Mod Lab</h1>
-  <span class="meta" id="meta">loading…</span>
-  <span class="spacer"></span>
-  <span class="pill" id="branch">—</span>
-</header>
-<nav>
-  <button data-tab="tests" class="active">Tests</button>
-  <button data-tab="previews">Previews</button>
-  <button data-tab="map">Map</button>
-</nav>
-<main>
-  <section id="tests" class="active">
-    <div class="row" style="margin-bottom:12px">
-      <button class="run" data-job="sim">Run headless (5s)</button>
-      <button class="run secondary" data-job="probe">Run engine probe</button>
-      <button class="run secondary" data-job="engine">Run engine baseline</button>
-      <button class="run secondary" data-job="chain">Run full chain</button>
-      <span id="jobstate" class="pill">idle</span>
+  <!-- Local SVG icons. No icon CDN, React, or runtime CSS dependency. -->
+  <svg class="hidden" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-test" viewBox="0 0 24 24"><path d="m9 3 6 0m-5 0v6l-5 8a3 3 0 0 0 2.5 4h9a3 3 0 0 0 2.5-4l-5-8V3M8 14h8"/></symbol>
+    <symbol id="icon-ui" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></symbol>
+    <symbol id="icon-map" viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15"/></symbol>
+    <symbol id="icon-pen" viewBox="0 0 24 24"><path d="m16 3 5 5L9 20l-6 1 1-6L16 3Zm-2 2 5 5M3 21h18"/></symbol>
+    <symbol id="icon-code" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/><circle cx="12" cy="12" r="9"/></symbol>
+    <symbol id="icon-layers" viewBox="0 0 24 24"><path d="m12 3 10 5-10 5L2 8l10-5Zm-10 9 10 5 10-5M2 16l10 5 10-5"/></symbol>
+    <symbol id="icon-box" viewBox="0 0 24 24"><path d="m12 3 9 5v9l-9 5-9-5V8l9-5Zm-9 5 9 5 9-5M12 13v9M7 5.5l9 5"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/></symbol>
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M7 7h10v10"/></symbol>
+  </svg>
+
+  <header class="border-b border-border bg-surface">
+    <div class="mx-auto flex max-w-[1480px] items-center justify-between gap-4 px-6 py-4 lg:px-10">
+      <a href="#tests" class="flex items-center gap-3 no-underline">
+        <span class="flex size-9 items-center justify-center rounded-lg bg-fg font-mono text-sm font-bold tracking-tight text-surface">7D</span>
+        <span class="text-sm font-semibold tracking-tight">Mod Lab</span>
+        <span class="hidden border-l border-border pl-3 text-xs text-muted sm:inline">Your local workbench</span>
+      </a>
+      <div class="flex items-center gap-3">
+        <span class="hidden items-center gap-2 text-[11px] text-muted sm:flex"><span class="size-1.5 rounded-full bg-emerald-500"></span>Local only</span>
+        <code id="branch" class="hidden rounded-md border border-border px-2.5 py-1 font-mono text-[10px] text-muted md:block">Connecting…</code>
+        <button id="theme" class="quiet" aria-label="Switch light or dark theme">Dark theme</button>
+      </div>
     </div>
-    <pre id="output">Pick a test to run. Everything runs locally; nothing is installed or sent anywhere.</pre>
-  </section>
-  <section id="previews">
-    <p class="meta" style="color:var(--dim);margin-top:0">Rendered UI previews and maps from your latest runs. Click to enlarge.</p>
-    <div class="grid" id="gallery"></div>
-  </section>
-  <section id="map">
-    <div class="mapbar">
-      <label>World <select id="world"></select></label>
-      <label>Zoom <input type="range" id="zoom" min="1" max="8" step="0.25" value="1"></label>
-      <label><input type="checkbox" id="showSpawns" checked> spawns</label>
-      <label><input type="checkbox" id="showPrefabs" checked> prefabs</label>
-      <label><input type="checkbox" id="showRoutes" checked> follow route</label>
-      <span class="meta" id="hover" style="color:var(--dim)">—</span>
+    <nav aria-label="Workspace" class="mx-auto flex max-w-[1480px] gap-6 overflow-x-auto px-6 lg:gap-8 lg:px-10">
+      <button data-tab="tests" class="tab active"><svg class="icon"><use href="#icon-test"/></svg>Test bench</button>
+      <button data-tab="ui" class="tab"><svg class="icon"><use href="#icon-ui"/></svg>UI studio</button>
+      <button data-tab="map" class="tab"><svg class="icon"><use href="#icon-map"/></svg>World & paths</button>
+      <button data-tab="board" class="tab"><svg class="icon"><use href="#icon-pen"/></svg>Design board</button>
+    </nav>
+  </header>
+
+  <main class="mx-auto max-w-[1480px] px-6 pb-6 pt-8 lg:px-10 lg:pt-10">
+    <div class="mb-8 flex items-end justify-between gap-4">
+      <div>
+        <p class="mb-2 text-[11px] font-medium text-muted">Workspace <span class="mx-2 opacity-40">/</span> 7 Days to Die</p>
+        <h1 id="page-title" class="text-3xl font-semibold tracking-[-0.035em]">Test bench</h1>
+        <p id="page-description" class="mt-2 text-sm text-muted">Build with confidence. Test your mods against the real game.</p>
+      </div>
+      <span id="address" class="hidden rounded-lg border border-border bg-surface px-3 py-2 font-mono text-[10px] text-muted lg:block">127.0.0.1:7777</span>
     </div>
-    <div class="mapwrap"><canvas id="map" height="720"></canvas></div>
-    <div class="legend" style="margin-top:8px">
-      <span><i style="background:#ffd166"></i>spawn</span>
-      <span><i style="background:#7aa2f7"></i>prefab</span>
-      <span><i style="background:#f7768e"></i>leader</span>
-      <span><i style="background:#7bd88f"></i>follower</span>
-      <span style="color:var(--dim)">click the map to read a world coordinate</span>
-    </div>
-  </section>
-</main>
-<dialog id="lightbox"><img id="lightimg" alt=""></dialog>
-<script>
-const $ = (s) => document.querySelector(s);
-let world = null, telemetry = null, mapImg = new Image();
+    <div id="error" class="notice" role="alert" hidden></div>
+    <div id="notice" class="mb-5 rounded-lg border border-accent/20 bg-accent/5 px-4 py-3 text-xs text-accent" role="status" hidden></div>
 
-// tabs
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button').forEach(x => x.classList.remove('active'));
-  document.querySelectorAll('section').forEach(x => x.classList.remove('active'));
-  b.classList.add('active'); $('#' + b.dataset.tab).classList.add('active');
-  if (b.dataset.tab === 'map') drawMap();
-  if (b.dataset.tab === 'previews') loadPreviews();
-});
+    <!-- TEST BENCH -->
+    <section id="tests" class="page active">
+      <div class="mb-4 flex items-center justify-between"><h2 class="text-xs font-medium text-muted">CHECK SUITES</h2><span class="text-[11px] text-muted">Offline first. Engine checks are opt-in.</span></div>
+      <div id="suites" class="mb-7 grid gap-3 md:grid-cols-2 xl:grid-cols-3"></div>
+      <details class="panel scenario-builder mb-7 p-5" id="scenario-builder">
+        <summary>Build a custom engine test</summary>
+        <div class="intro my-5"><h2>Test exactly what you changed.</h2><p>Add read-only console queries and expected output. Each run keeps its scenario and evidence, using a private headless server.</p></div>
+        <label class="max-w-md">Scenario name<input id="scenario-name" value="Manager and world smoke test" maxlength="100"></label>
+        <div id="scenario-steps"></div>
+        <div class="toolbar mt-5"><button id="scenario-add" class="quiet">+ Add assertion</button><button id="scenario-run" class="primary" data-job="scenario">Run custom scenario</button><span class="text-[11px] text-muted">Expected output accepts a regex. Server log errors fail the run.</span></div>
+      </details>
+      <div class="grid items-start gap-5 lg:grid-cols-[250px_minmax(0,1fr)]">
+        <div class="panel p-5"><div class="panel-heading"><h2>Recent runs</h2><span id="run-count" class="text-[11px] text-muted"></span></div><div id="history" class="history"></div></div>
+        <div class="panel p-5 lg:p-6">
+          <div class="panel-heading"><h2 id="result-title">Pick a check to run</h2><span id="result-status" class="badge">Not run</span></div>
+          <div id="result-summary" class="stats"></div>
+          <div id="checks" class="check-list"></div>
+          <details class="border-t border-border pt-4"><summary>Console output</summary><pre id="output">Results appear as checks run. Engine buttons launch a private server, never your normal game.</pre></details>
+        </div>
+      </div>
+    </section>
 
-async function api(path) { const r = await fetch(path); return r.json(); }
+    <!-- UI STUDIO -->
+    <section id="ui" class="page">
+      <div class="grid items-start gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <div class="panel grid gap-5 p-5">
+          <h2 class="text-sm">Preview settings</h2>
+          <label>Panel<select id="preview-target"><option value="party">Party portrait</option><option value="menu">Main menu / MODS button</option></select></label>
+          <label>Player state<select id="preview-state"><option value="healthy">Healthy</option><option value="low">Low health</option><option value="dead">Dead</option><option value="muted">Muted</option><option value="far">Far away</option></select></label>
+          <label>Display name<input id="preview-name" value="NoisemakerJon" maxlength="80"></label>
+          <label>Distance<input id="preview-distance" value="128m" maxlength="30"></label>
+          <button id="render-preview" class="primary">Render preview <svg class="icon"><use href="#icon-arrow"/></svg></button>
+          <label class="check-label"><input id="auto-preview" type="checkbox">Auto-refresh every 3 seconds</label>
+          <p class="text-[11px] leading-relaxed text-muted">Uses your current source XML. Atlas icons are placeholders, not pixel-exact textures. No mod files are changed.</p>
+          <details><summary>Render details</summary><pre id="preview-log">Choose a panel and render.</pre></details>
+        </div>
+        <div class="panel p-5 lg:p-6">
+          <div class="panel-heading"><h2>Preview canvas</h2><a id="preview-download" class="quiet" hidden download>Open image ↗</a></div>
+          <div class="preview-stage"><img id="preview-image" alt="Rendered UI preview" hidden><p id="preview-empty" class="text-sm text-muted">Your panel will appear here.</p></div>
+          <p class="mt-4 text-[11px] text-muted">Layout preview · actual game XML + your patches · 2× render</p>
+        </div>
+      </div>
+      <div class="panel mt-6 p-5 lg:p-6"><div class="panel-heading"><h2>Evidence library</h2><div class="toolbar"><input id="artifact-filter" placeholder="Search images…" aria-label="Filter images"><button id="refresh-gallery" class="quiet">Refresh</button></div></div><div id="gallery" class="gallery"></div></div>
+    </section>
 
-async function status() {
-  const s = await api('/api/status');
-  $('#branch').textContent = s.branch || 'detached';
-  $('#meta').textContent = s.game;
-}
+    <!-- WORLD & PATHS -->
+    <section id="map" class="page">
+      <div class="panel mb-5 flex flex-wrap items-end gap-3 p-4">
+        <label class="w-40">World<select id="world"></select></label>
+        <label class="min-w-48 flex-1">Follow recording<select id="recording"><option value="">No recording</option></select></label>
+        <button id="refresh-recordings" class="quiet">Refresh</button>
+        <div class="hidden h-8 w-px bg-border lg:block"></div>
+        <button id="fit-world" class="quiet">Fit world</button><button id="fit-route" class="primary">Focus route</button><button id="map-export" class="quiet">Export PNG</button>
+      </div>
+      <div class="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+        <div class="panel overflow-hidden">
+          <div class="relative"><canvas id="world-canvas" tabindex="0" aria-label="Interactive world and route map. Arrow keys pan; plus and minus zoom."></canvas><span id="coordinates" class="canvas-badge">Drag to pan · wheel to zoom</span><div class="absolute right-3 top-3 flex gap-1"><button id="zoom-out" class="quiet" aria-label="Zoom out">−</button><button id="zoom-in" class="quiet" aria-label="Zoom in">+</button></div></div>
+          <div class="flex items-center gap-3 border-t border-border p-4"><button id="play" class="quiet">▶ Play</button><input id="time" class="min-w-0 flex-1" type="range" min="0" max="1" step="0.1" value="1" aria-label="Recording time"><span id="time-label" class="w-24 shrink-0 text-right font-mono text-[10px] text-muted">No recording</span></div>
+          <div id="sample-stats" class="stats mx-4"></div>
+          <canvas id="trace-chart" aria-label="Measured leader gap over the recording"></canvas>
+        </div>
+        <aside class="panel p-5">
+          <h2 class="mb-4 text-sm">Map layers</h2><div id="layers" class="grid gap-3"></div><hr>
+          <h2 class="mb-4 text-sm">Annotate</h2>
+          <label class="mb-3">Tool<select id="map-tool"><option value="pan">Pan / inspect</option><option value="pen">Draw route</option><option value="rect">Mark area / obstacle</option><option value="text">Add note</option></select></label>
+          <label>Note<input id="map-note" placeholder="Door should open here" maxlength="200"></label>
+          <div class="toolbar my-4"><button id="map-undo" class="quiet">Undo</button><button id="map-save" class="primary">Save sketch</button></div>
+          <p id="map-save-state" class="text-[10px] leading-relaxed text-muted">Sketches stay in .scratch and use world coordinates.</p><hr>
+          <h2 class="mb-2 text-sm">Event timeline</h2><p id="recording-info" class="mb-3 text-[10px] leading-relaxed text-muted">No recording selected.</p><div id="events" class="event-list"></div>
+        </aside>
+      </div>
+      <p class="mt-4 max-w-4xl text-[11px] leading-relaxed text-muted">Terrain overview alignment is not yet verified in-game. Routes and wall cells share recorded game coordinates; the biome image is not live block geometry. Your sketches are annotations, not simulated pathfinding.</p>
+    </section>
 
-async function loadPreviews() {
-  const items = await api('/api/previews');
-  const g = $('#gallery'); g.innerHTML = '';
-  for (const p of items) {
-    const el = document.createElement('div'); el.className = 'thumb';
-    el.innerHTML = `<img loading="lazy" src="${p.url}" alt=""><div title="${p.name}">${p.name}</div>`;
-    el.onclick = () => { $('#lightimg').src = p.url; $('#lightbox').showModal(); };
-    g.appendChild(el);
-  }
-}
+    <!-- DESIGN BOARD -->
+    <section id="board" class="page">
+      <div class="panel mb-5 flex flex-wrap items-end gap-3 p-4">
+        <label class="w-36">Tool<select id="board-tool"><option value="pen">Freehand</option><option value="rect">Box</option><option value="arrow">Arrow</option><option value="text">Label</option></select></label>
+        <label class="min-w-52 flex-1">Label<input id="board-text" placeholder="Inventory → category → chest" maxlength="200"></label>
+        <label>Ink<input id="board-color" class="h-10 w-12 cursor-pointer rounded-lg border border-border bg-surface p-1" type="color" value="#635bdb"></label>
+        <button id="board-undo" class="quiet">Undo</button><button id="board-save" class="primary">Save board</button><button id="board-export" class="quiet">Export PNG</button>
+      </div>
+      <div class="panel p-3"><canvas id="board-canvas" aria-label="Design drawing board"></canvas></div>
+      <p id="board-state" class="mt-3 text-xs text-muted"></p>
+    </section>
+    <footer class="mt-10 flex items-center justify-between border-t border-border pt-5 text-[10px] text-muted"><span>7 Days Mod Lab</span><span>Real checks. Local evidence. Your saves stay untouched.</span></footer>
+  </main>
 
-async function runJob(job) {
-  const out = $('#output'), state = $('#jobstate');
-  document.querySelectorAll('button.run').forEach(b => b.disabled = true);
-  state.textContent = 'running…'; state.className = 'pill warn';
-  out.textContent = 'starting ' + job + '…';
-  try {
-    const r = await api('/api/run?job=' + encodeURIComponent(job));
-    out.textContent = r.output || '(no output)';
-    state.textContent = r.ok ? 'passed' : 'failed';
-    state.className = 'pill ' + (r.ok ? 'ok' : 'bad');
-  } catch (e) {
-    out.textContent = String(e); state.textContent = 'error'; state.className = 'pill bad';
-  } finally {
-    document.querySelectorAll('button.run').forEach(b => b.disabled = false);
-  }
-}
-document.querySelectorAll('button.run').forEach(b => b.onclick = () => runJob(b.dataset.job));
-
-// map
-async function loadWorlds() {
-  const list = await api('/api/worlds');
-  const sel = $('#world'); sel.innerHTML = '';
-  for (const w of list) sel.innerHTML += `<option value="${w.name}">${w.name} (${w.size})</option>`;
-  if (list.length) { sel.value = 'Navezgane'; await pickWorld(); }
-  sel.onchange = pickWorld;
-}
-async function pickWorld() {
-  world = await api('/api/world/' + $('#world').value);
-  mapImg = new Image();
-  mapImg.onload = drawMap;
-  mapImg.src = '/worlds/' + world.name + '/biomes.png';
-  const t = await api('/api/telemetry');
-  if (t.length) telemetry = await api('/api/telemetry/' + encodeURIComponent(t[0].name));
-  else telemetry = null;
-  drawMap();
-}
-function toImage(x, z) {
-  const [iw, ih] = world.image, size = world.size;
-  return [ (x + size / 2) / size * iw, (size / 2 - z) / size * ih ];
-}
-function drawMap() {
-  if (!world) return;
-  const c = $('#map'), ctx = c.getContext('2d');
-  const zoom = parseFloat($('#zoom').value);
-  const [iw, ih] = world.image;
-  const scale = (c.clientWidth / iw) * zoom;
-  c.width = c.clientWidth; c.height = Math.round(ih * scale);
-  ctx.imageSmoothingEnabled = zoom <= 2;
-  ctx.fillStyle = '#0b0e13'; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.drawImage(mapImg, 0, 0, c.width, c.height);
-  const px = (x, z) => { const [ix, iy] = toImage(x, z); return [ix * scale, iy * scale]; };
-
-  if ($('#showPrefabs').checked && world.prefabs) {
-    ctx.fillStyle = 'rgba(122,162,247,.75)';
-    for (const p of world.prefabs) { const [x, y] = px(p.x, p.z); ctx.fillRect(x - 1.5, y - 1.5, 3, 3); }
-  }
-  if ($('#showRoutes').checked && telemetry && telemetry.samples) {
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#f7768e'; ctx.beginPath();
-    telemetry.samples.forEach((s, i) => { const [x, y] = px(s.l[0], s.l[2]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    ctx.stroke();
-    ctx.strokeStyle = '#7bd88f'; ctx.beginPath();
-    telemetry.samples.forEach((s, i) => { const [x, y] = px(s.p[0], s.p[2]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    ctx.stroke();
-  }
-  if ($('#showSpawns').checked && world.spawns) {
-    for (const s of world.spawns) {
-      const [x, y] = px(s[0], s[2]);
-      ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fillStyle = '#ffd166'; ctx.fill();
-      ctx.lineWidth = 1.5; ctx.strokeStyle = '#0b0e13'; ctx.stroke();
-    }
-  }
-}
-$('#zoom').onchange = drawMap;
-['showSpawns', 'showPrefabs', 'showRoutes'].forEach(id => $('#' + id).onchange = drawMap);
-$('#map').onmousemove = (e) => {
-  if (!world) return;
-  const rect = e.target.getBoundingClientRect();
-  const [iw, ih] = world.image, scale = (e.target.clientWidth / iw) * parseFloat($('#zoom').value);
-  const ix = (e.clientX - rect.left) / scale, iy = (e.clientY - rect.top) / scale;
-  const x = ix / iw * world.size - world.size / 2;
-  const z = world.size / 2 - iy / ih * world.size;
-  $('#hover').textContent = `x ${x.toFixed(0)}  z ${z.toFixed(0)}`;
-};
-window.addEventListener('resize', drawMap);
-
-status(); loadPreviews(); loadWorlds();
-</script>
+  <dialog id="lightbox"><div class="panel-heading"><strong id="lightbox-title" class="text-sm font-medium"></strong><button id="close-lightbox" class="quiet">Close ✕</button></div><img id="lightbox-image" alt="Selected evidence image"></dialog>
 </body>
 </html>

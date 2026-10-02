@@ -19,10 +19,10 @@ Everything above is available in a browser instead of the console:
 python lab/server.py          # http://127.0.0.1:7777, opens automatically
 ```
 
-Tabs: **Tests** (run the headless tier, the probe, the engine baseline or the full chain,
-with output inline), **Previews** (every PNG under `.scratch`, click to enlarge), and
-**Map** (the game's own biome map for any world, with spawn points, prefab markers and the
-newest follow-telemetry route — the top-down map for improving pathfinding). See `lab/README.md`.
+Workspaces: **Test bench** (live checks/history and a custom engine test builder),
+**UI studio** (state controls, source refresh and evidence gallery), **World & paths**
+(pan/zoom, real recordings, route/wall replay, time scrubber and saved annotations),
+and **Design board** (draw diagrams/UI ideas, save and export). See `lab/README.md`.
 
 ## UI preview (no launch)
 
@@ -68,6 +68,7 @@ down — all in one command.
 
 ```
 python tools/headless.py run                 # up -> baseline scenario -> down
+python tools/headless.py run --scenario path/to/scenario.json  # up -> custom scenario -> down
 python tools/headless.py up                  # leave it running, then:
 python tools/headless.py scenario tools/scenarios/my-scenario.json
 python tools/headless.py tel "visitpois start"

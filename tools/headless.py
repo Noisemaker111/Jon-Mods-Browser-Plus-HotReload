@@ -235,13 +235,19 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("up").add_argument("--wait", type=int, default=180)
     sub.add_parser("down")
-    sub.add_parser("run")
+    sub.add_parser("run").add_argument("--scenario", help="scenario JSON; defaults to the built-in baseline")
     sub.add_parser("probe")
     sub.add_parser("gen").add_argument("--seed", default="HeadlessGen")
     sub.add_parser("check").add_argument("names", nargs="*")
     sub.add_parser("scenario").add_argument("file")
     sub.add_parser("tel").add_argument("command")
     ns = parser.parse_args()
+
+    # A self-contained run must own its server. Never borrow a hand-started
+    # instance and then shut it down in the finally block.
+    if ns.cmd in ("run", "probe", "gen") and state().get("pid") and alive(state()["pid"]):
+        print("FAIL isolated server is already running; leave it alone or stop it explicitly before a self-contained run")
+        return 1
 
     if ns.cmd == "up":
         return up(ns.wait)
@@ -282,7 +288,7 @@ def main():
         code = up()
         try:
             if code == 0:
-                code = _engine().run_scenario(str(TOOLS / "scenarios" / "baseline.json"))
+                code = _engine().run_scenario(ns.scenario or str(TOOLS / "scenarios" / "baseline.json"))
         finally:
             down()
         return code
